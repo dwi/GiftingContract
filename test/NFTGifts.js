@@ -3,10 +3,10 @@ const { expect } = require('chai')
 const { ethers } = require('hardhat')
 
 
-let MockAxie, NFTGifting, owner, addr1, addr2, operator, mockAxie, giftContract
+let MockAxie, NFTGifts, owner, addr1, addr2, operator, mockAxie, giftContract
 var cancelledGiftID
 
-describe('NFTGifting', function () {
+describe('NFTGifts', function () {
 
     const goodCode = 'validCode'
     const badCode = 'invalidCode'
@@ -14,13 +14,13 @@ describe('NFTGifting', function () {
 
     async function deployTokenFixture() {
         MockAxie = await ethers.getContractFactory('MockAxie')
-        NFTGifting = await ethers.getContractFactory('Gifts')
+        NFTGifts = await ethers.getContractFactory('NFTGifts')
         owner = (await ethers.getSigners())[0]
         addr1 = (await ethers.getSigners())[1]
         addr2 = (await ethers.getSigners())[2]
         operator = (await ethers.getSigners())[3]
         mockAxie = await MockAxie.deploy()
-        giftContract = await NFTGifting.deploy()
+        giftContract = await NFTGifts.deploy()
 
         await mockAxie.deployed()
         await giftContract.deployed()
@@ -182,26 +182,26 @@ describe('NFTGifting', function () {
             const giftID = 3
             it("Should revert when trying to generate signature for your own gift", async function () {
                 await expect(giftContract.connect(addr1).getGiftSignature(giftID, goodCode))
-                    .to.be.revertedWith('Cannot claim your own gift')
+                    .to.be.revertedWith('NFTGifts: Cannot claim your own gift')
             })
             it("Should revert when trying to use wrong code", async function () {
                 await expect(giftContract.connect(addr2).getGiftSignature(giftID, goodCodeHash))
-                    .to.be.revertedWith('Incorrect secret code')
+                    .to.be.revertedWith('NFTGifts: Incorrect secret code')
                 await expect(giftContract.connect(addr2).getGiftSignature(giftID, badCode))
-                    .to.be.revertedWith('Incorrect secret code')
+                    .to.be.revertedWith('NFTGifts: Incorrect secret code')
             })
             it("Should revert when trying to generate signature for already claimed gift", async function () {
                 sig = giftContract.connect(addr1).getGiftSignature(1, goodCode)
                 await expect(sig)
-                    .to.be.revertedWith('Gift has already been claimed')
+                    .to.be.revertedWith('NFTGifts: Gift has already been claimed')
             })
             it("Should revert when trying to claim claimed gift with already used signature", async function () {
                 await expect(giftContract.connect(operator).claimGift(1, sig))
-                    .to.be.revertedWith('Gift has already been claimed')
+                    .to.be.revertedWith('NFTGifts: Gift has already been claimed')
             })
             it("Should revert when trying to generate signature for non existing or deleted gift", async function () {
                 await expect(giftContract.connect(addr1).getGiftSignature(9999, goodCode))
-                    .to.be.revertedWith('Gift does not exist')
+                    .to.be.revertedWith('NFTGifts: Gift does not exist')
             })
         })
     })
@@ -227,17 +227,17 @@ describe('NFTGifting', function () {
             bal = Number(await mockAxie.balanceOf(owner.address))
             tx = await giftContract.cancelGift(lastGiftID)
             cancelledGiftID = lastGiftID
-            await expect(giftContract.getGift(lastGiftID)).to.be.revertedWith('Gift does not exist')
+            await expect(giftContract.getGift(lastGiftID)).to.be.revertedWith('NFTGifts: Gift does not exist')
         })
         it('Token IDs are returned back to gift creator', async function () {
             expect(await mockAxie.balanceOf(owner.address)).to.equal(bal + 1);
         })
         it("Should not be able to generate signature for cancelled gift", async function () {
-            await expect(giftContract.connect(addr2).getGiftSignature(cancelledGiftID, goodCode)).to.be.revertedWith('Gift does not exist')
+            await expect(giftContract.connect(addr2).getGiftSignature(cancelledGiftID, goodCode)).to.be.revertedWith('NFTGifts: Gift does not exist')
         })
         it("Should not be able to claim cancelled gift", async function () {
             let bal = Number(await mockAxie.balanceOf(addr2.address))
-            await expect(giftContract.connect(addr2).claimGift(cancelledGiftID, sig)).to.be.revertedWith('Gift does not exist')
+            await expect(giftContract.connect(addr2).claimGift(cancelledGiftID, sig)).to.be.revertedWith('NFTGifts: Gift does not exist')
             expect(await mockAxie.balanceOf(addr2.address)).to.equal(bal)
         })
         describe('Events', function () {
@@ -255,25 +255,25 @@ describe('NFTGifting', function () {
                 expect(await mockAxie.balanceOf(owner.address)).to.equal(bal - 1);
             })
             it('Should revert because of invalid gift ID', async function () {
-                await expect(giftContract.cancelGift(99999)).to.be.revertedWith('Gift does not exist and cannot be cancelled')
+                await expect(giftContract.cancelGift(99999)).to.be.revertedWith('NFTGifts: Gift does not exist and cannot be cancelled')
             })
             it('Should revert because not owner of that gift', async function () {
                 const lastGiftID = await giftContract.lastID()
-                await expect(giftContract.connect(addr1).cancelGift(lastGiftID)).to.be.revertedWith('Only gift creator can cancel the gift')
+                await expect(giftContract.connect(addr1).cancelGift(lastGiftID)).to.be.revertedWith('NFTGifts: Only gift creator can cancel the gift')
             })
             it("Should not be able to generate signature for cancelled gift", async function () {
-                await expect(giftContract.connect(addr2).getGiftSignature(cancelledGiftID, goodCode)).to.be.revertedWith('Gift does not exist')
+                await expect(giftContract.connect(addr2).getGiftSignature(cancelledGiftID, goodCode)).to.be.revertedWith('NFTGifts: Gift does not exist')
             })
             it("Should not be able to claim cancelled gift", async function () {
                 let bal = Number(await mockAxie.balanceOf(addr2.address))
-                await expect(giftContract.connect(addr2).claimGift(cancelledGiftID, sig)).to.be.revertedWith('Gift does not exist')
+                await expect(giftContract.connect(addr2).claimGift(cancelledGiftID, sig)).to.be.revertedWith('NFTGifts: Gift does not exist')
                 expect(await mockAxie.balanceOf(addr2.address)).to.equal(bal)
             })
             it('Should revert because already claimed', async function () {
-                await expect(giftContract.cancelGift(1)).to.be.revertedWith('Gift has already been claimed or does not exist and cannot be cancelled')
+                await expect(giftContract.cancelGift(1)).to.be.revertedWith('NFTGifts: Gift has already been claimed or does not exist and cannot be cancelled')
             })
             it('Should revert because gift already cancelled', async function () {
-                await expect(giftContract.cancelGift(cancelledGiftID)).to.be.revertedWith('Gift does not exist and cannot be cancelled')
+                await expect(giftContract.cancelGift(cancelledGiftID)).to.be.revertedWith('NFTGifts: Gift does not exist and cannot be cancelled')
             })
         })
     })
@@ -350,7 +350,7 @@ describe('NFTGifting', function () {
 
             it("[3/3] Should revert because of wrong pass", async function () {
                 await expect(giftContract.connect(addr2).getGiftSignature(lastGiftID, 'wrongpass'))
-                    .to.be.revertedWith('Incorrect secret code')
+                    .to.be.revertedWith('NFTGifts: Incorrect secret code')
             })
             it("[3/3] Should generate correct claiming signature", async function () {
                 hash = await giftContract.connect(addr2).getGiftSignature(lastGiftID, 'pass3')
