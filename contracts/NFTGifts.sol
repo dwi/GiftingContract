@@ -23,12 +23,17 @@ contract NFTGifts is ERC721Holder {
   mapping(uint256 => Gift) private allGifts;
 
   uint256 private giftIDCounter;
-  
-  function lastID() view public returns (uint256) {
-    return giftIDCounter;
-  }  
 
-  event GiftCreated(uint256 _giftID, address _createdBy, address _tokenAddress, uint256[] _tokenIDs);
+  function lastID() public view returns (uint256) {
+    return giftIDCounter;
+  }
+
+  event GiftCreated(
+    uint256 _giftID,
+    address _createdBy,
+    address _tokenAddress,
+    uint256[] _tokenIDs
+  );
   event GiftClaimed(uint256 _giftID, address _claimedBy);
   event GiftCancelled(uint256 _giftID);
 
@@ -46,7 +51,10 @@ contract NFTGifts is ERC721Holder {
     bytes32 _secretHash
   ) public {
     // Ensure that the given NFT contract address is valid
-    require(_tokenAddress != address(0), "NFTGifts: Invalid NFT contract address");
+    require(
+      _tokenAddress != address(0),
+      "NFTGifts: Invalid NFT contract address"
+    );
 
     // Ensure that the given passcode is not empty
     require(_secretHash.length > 0, "NFTGifts: Invalid passcode");
@@ -81,7 +89,11 @@ contract NFTGifts is ERC721Holder {
     uint256[][] calldata _tokenIDs,
     bytes32[] calldata _secretHash
   ) public {
-    require(_secretHash.length == _tokenIDs.length && _secretHash.length == _tokenAddress.length, "NFTGifts: Arrays must be of the same length");
+    require(
+      _secretHash.length == _tokenIDs.length &&
+        _secretHash.length == _tokenAddress.length,
+      "NFTGifts: Arrays must be of the same length"
+    );
     for (uint256 _i = 0; _i < _secretHash.length; _i++) {
       createGift(_tokenAddress[_i], _tokenIDs[_i], _secretHash[_i]);
     }
@@ -89,7 +101,10 @@ contract NFTGifts is ERC721Holder {
 
   function claimGift(uint256 _giftID, bytes memory _signature) public {
     require(allGifts[_giftID].giftID > 0, "NFTGifts: Gift does not exist");
-    require(allGifts[_giftID].claimed == false, "NFTGifts: Gift has already been claimed");
+    require(
+      allGifts[_giftID].claimed == false,
+      "NFTGifts: Gift has already been claimed"
+    );
 
     address _receiverFromSig = getSigner(_giftID, _signature);
     require(
@@ -170,7 +185,10 @@ contract NFTGifts is ERC721Holder {
     string calldata _plainSecret
   ) public view returns (bytes32) {
     require(allGifts[_giftID].giftID > 0, "NFTGifts: Gift does not exist");
-    require(allGifts[_giftID].claimed == false, "NFTGifts: Gift has already been claimed");
+    require(
+      allGifts[_giftID].claimed == false,
+      "NFTGifts: Gift has already been claimed"
+    );
     require(
       allGifts[_giftID].creator != msg.sender,
       "NFTGifts: Cannot claim your own gift"
@@ -195,16 +213,21 @@ contract NFTGifts is ERC721Holder {
     uint256 _giftID,
     bytes memory _signature
   ) public view returns (address) {
-
     //bytes32 messageHash = keccak256(abi.encodePacked(_giftID, allGifts[_giftID].encryptedCodeHash));
-    bytes32 messageHash = getGiftSignatureInternal(_giftID, allGifts[_giftID].encryptedCodeHash);
+    bytes32 messageHash = getGiftSignatureInternal(
+      _giftID,
+      allGifts[_giftID].encryptedCodeHash
+    );
     bytes32 ethSignedMessageHash = ECDSA.toEthSignedMessageHash(messageHash);
     address claimer = ECDSA.recover(ethSignedMessageHash, _signature);
-    require(allGifts[_giftID].creator != claimer, "NFTGifts: Cannot claim your own gift");
+    require(
+      allGifts[_giftID].creator != claimer,
+      "NFTGifts: Cannot claim your own gift"
+    );
     return claimer;
   }
 
-// no need for following, got it from ECDSA.sol
+  // no need for following, got it from ECDSA.sol
 
   // function getEthSignedMessageHash(
   //   bytes32 _messageHash
