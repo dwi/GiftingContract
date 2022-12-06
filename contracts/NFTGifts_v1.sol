@@ -15,35 +15,53 @@ contract NFTGifts_v1 is ERC721Holder {
     bool claimed;
     // Flag to track if the Gift has been cancelled
     bool cancelled;
-    // Flag to track if the Gift egists at all
-    bool exists;
     // Address of the Gift creator
     address creator;
   }
+
+  struct GiftPublic {
+    address tokenAddress;
+    uint256[] tokenIDs;
+    bool claimed;
+    address creator;
+  }
+
   mapping(bytes32 => Gift) private allGifts;
 
   // need this to keep index of all gifts so I can easily find unclaimed gifts made by certain address (getUnclaimedGifts)
   bytes32[] public allGiftsIndex;
 
   event GiftCreated(
-    bytes32 _hash,
-    address _createdBy,
+    bytes32 indexed _hash,
+    address indexed _createdBy,
     address _tokenAddress,
     uint256[] _tokenIDs
   );
-  event GiftClaimed(bytes32 _hash, address _claimedBy);
-  event GiftCancelled(bytes32 _hash);
+  event GiftClaimed(bytes32 indexed _hash, address _claimedBy);
+  event GiftCancelled(bytes32 indexed _hash);
 
   function getGift(
     bytes32 _hashedSecret
-  ) public view returns (Gift memory currentGift) {
-    currentGift = allGifts[_hashedSecret];
+  ) external view returns (GiftPublic memory) {
+    Gift memory currentGift = allGifts[_hashedSecret];
     require(
-      currentGift.exists == true && currentGift.cancelled == false,
+      currentGift.creator != address(0) && currentGift.cancelled == false,
       "NFTGifts: Invalid secret code"
     );
-    // TODO: Return only certain items from Gift struct, not everything
-    return currentGift;
+
+    return stripGift(currentGift);
+  }
+
+  function stripGift(
+    Gift memory _gift
+  ) private pure returns (GiftPublic memory) {
+    return
+      GiftPublic(
+        _gift.tokenAddress,
+        _gift.tokenIDs,
+        _gift.claimed,
+        _gift.creator
+      );
   }
 
   function createGift(
@@ -59,8 +77,10 @@ contract NFTGifts_v1 is ERC721Holder {
 
     // Ensure that the given passcode is not empty
     require(_secretHash.length > 0, "NFTGifts: Invalid secret code");
+
+    // make sure creator is 0x
     require(
-      allGifts[_secretHash].exists == false,
+      allGifts[_secretHash].creator == address(0),
       "NFTGifts: Secret code already used"
     );
 
@@ -78,12 +98,12 @@ contract NFTGifts_v1 is ERC721Holder {
     // Save the gift information
 
     // this uses more gas than the other thing
+    
     // allGifts[_secretHash] = Gift({
     //   tokenAddress: _tokenAddress,
     //   tokenIDs: _tokenIDs,
     //   claimed: false,
     //   cancelled: false,
-    //   exists: true,
     //   creator: msg.sender
     // });
 
@@ -92,7 +112,6 @@ contract NFTGifts_v1 is ERC721Holder {
     allGifts[_secretHash].tokenIDs = _tokenIDs;
     allGifts[_secretHash].claimed = false;
     allGifts[_secretHash].cancelled = false;
-    allGifts[_secretHash].exists = true;
 
     emit GiftCreated(_secretHash, msg.sender, _tokenAddress, _tokenIDs);
   }
@@ -101,7 +120,7 @@ contract NFTGifts_v1 is ERC721Holder {
     address[] calldata _tokenAddress,
     uint256[][] calldata _tokenIDs,
     bytes32[] calldata _secretHash
-  ) public {
+  ) external {
     require(
       _secretHash.length == _tokenIDs.length &&
         _secretHash.length == _tokenAddress.length,
@@ -112,10 +131,10 @@ contract NFTGifts_v1 is ERC721Holder {
     }
   }
 
-  function claimGift(bytes32 _hashedSecret, bytes memory _signature) public {
+  function claimGift(bytes32 _hashedSecret, bytes calldata _signature) external {
     Gift memory currentGift = allGifts[_hashedSecret];
     require(
-      currentGift.exists == true && currentGift.cancelled == false,
+      currentGift.creator != address(0) && currentGift.cancelled == false,
       "NFTGifts: Invalid secret code"
     );
     require(
@@ -130,11 +149,11 @@ contract NFTGifts_v1 is ERC721Holder {
     );
 
     // Transfer NFTs to recipient
-    for (uint256 i = 0; i < currentGift.tokenIDs.length; i++) {
+    for (uint256 _i = 0; _i < currentGift.tokenIDs.length; _i++) {
       ERC721(currentGift.tokenAddress).safeTransferFrom(
         address(this),
         _receiverFromSig,
-        currentGift.tokenIDs[i]
+        currentGift.tokenIDs[_i]
       );
     }
 
@@ -144,10 +163,11 @@ contract NFTGifts_v1 is ERC721Holder {
     emit GiftClaimed(_hashedSecret, _receiverFromSig);
   }
 
+  // TODO: Is there a better way to handle this?
   function getUnclaimedGifts()
-    public
+    external
     view
-    returns (Gift[] memory unclaimedGifts)
+    returns (GiftPublic[] memory unclaimedGifts)
   {
     Gift[] memory GiftsTemp = new Gift[](allGiftsIndex.length);
     uint256 count;
@@ -162,20 +182,19 @@ contract NFTGifts_v1 is ERC721Holder {
       }
     }
 
-    // TODO: Return only certain items from Gift struct, not everything
-    unclaimedGifts = new Gift[](count);
+    unclaimedGifts = new GiftPublic[](count);
     for (uint256 _i = 0; _i < count; _i++) {
-      unclaimedGifts[_i] = GiftsTemp[_i];
+      unclaimedGifts[_i] = stripGift(GiftsTemp[_i]);
     }
   }
 
-  function cancelGift(bytes32 _hashedSecret) public {
+  function cancelGift(bytes32 _hashedSecret) external {
     Gift memory currentGift = allGifts[_hashedSecret];
     require(
       currentGift.cancelled == false,
       "NFTGifts: The gift has been already cancelled"
     );
-    require(currentGift.exists == true, "NFTGifts: Invalid secret code");
+    require(currentGift.creator != address(0), "NFTGifts: Invalid secret code");
     require(
       currentGift.creator == msg.sender,
       "NFTGifts: Only gift creator can cancel the gift"
@@ -194,22 +213,18 @@ contract NFTGifts_v1 is ERC721Holder {
       );
     }
 
-    // Delete Gift from mapping (or should we use .deleted like .claimed?)
+    // Mark gift as cancelled
     allGifts[_hashedSecret].cancelled = true;
     emit GiftCancelled(_hashedSecret);
   }
 
-  function hash(string memory _string) public pure returns (bytes32) {
-    return keccak256(abi.encodePacked(_string));
-  }
-
   function getGiftSignature(
     string calldata _plainSecret
-  ) public view returns (bytes32) {
-    bytes32 hashedSecret = hash(_plainSecret);
+  ) external view returns (bytes32) {
+    bytes32 hashedSecret = keccak256(abi.encodePacked(_plainSecret));
     Gift memory currentGift = allGifts[hashedSecret];
     require(
-      currentGift.exists == true && currentGift.cancelled == false,
+      currentGift.creator != address(0) && currentGift.cancelled == false,
       "NFTGifts: Invalid secret code"
     );
 
@@ -222,22 +237,14 @@ contract NFTGifts_v1 is ERC721Holder {
       "NFTGifts: Cannot claim your own gift"
     );
 
-    return getGiftSignatureInternal(hashedSecret);
-    //return keccak256(abi.encodePacked(_GiftID, hashedSecret));
-  }
-
-  function getGiftSignatureInternal(
-    bytes32 _hashedSecret
-  ) private pure returns (bytes32) {
-    return keccak256(abi.encodePacked(_hashedSecret));
+    return keccak256(abi.encodePacked(hashedSecret));
   }
 
   function getSigner(
     bytes32 _hashedSecret,
-    bytes memory _signature
-  ) public view returns (address) {
-    //bytes32 messageHash = keccak256(abi.encodePacked(_GiftID, allGifts[_GiftID].encryptedCodeHash));
-    bytes32 messageHash = getGiftSignatureInternal(_hashedSecret);
+    bytes calldata _signature
+  ) private view returns (address) {
+    bytes32 messageHash = keccak256(abi.encodePacked(_hashedSecret));
     bytes32 ethSignedMessageHash = ECDSA.toEthSignedMessageHash(messageHash);
     address claimer = ECDSA.recover(ethSignedMessageHash, _signature);
     require(
