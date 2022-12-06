@@ -139,7 +139,8 @@ contract NFTGifts_v1 is ERC721Holder {
         _hashedSecret.length == _tokenAddress.length,
       "NFTGifts: Arrays must be of the same length"
     );
-    for (uint256 _i = 0; _i < _hashedSecret.length; _i++) {
+    uint256 arrayLength = _hashedSecret.length;
+    for (uint256 _i = 0; _i < arrayLength; _i++) {
       createGift(_tokenAddress[_i], _tokenIDs[_i], _hashedSecret[_i]);
     }
   }
@@ -219,7 +220,8 @@ contract NFTGifts_v1 is ERC721Holder {
     );
 
     // Transfer NFTs to the recipient of the gift.
-    for (uint256 _i = 0; _i < currentGift.tokenIDs.length; _i++) {
+    uint256 arrayLength = currentGift.tokenIDs.length;
+    for (uint256 _i = 0; _i < arrayLength; _i++) {
       ERC721(currentGift.tokenAddress).safeTransferFrom(
         address(this),
         _receiverFromSig,
@@ -288,7 +290,8 @@ contract NFTGifts_v1 is ERC721Holder {
     );
 
     // Transfer the NFTs back to the gift creator
-    for (uint256 _i = 0; _i < currentGift.tokenIDs.length; _i++) {
+    uint256 arrayLength = currentGift.tokenIDs.length;
+    for (uint256 _i = 0; _i < arrayLength; _i++) {
       ERC721(currentGift.tokenAddress).safeTransferFrom(
         address(this),
         currentGift.creator,

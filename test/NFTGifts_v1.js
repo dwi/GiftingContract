@@ -93,7 +93,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
     describe('Test reverts', function () {
       it('Should revert when using existing code', async function () {
         await expect(giftContract.connect(owner).createGift(mockAxie.address, [3], code('1')))
-        .to.be.revertedWith('NFTGifts: Secret code already used')
+          .to.be.revertedWith('NFTGifts: Secret code already used')
       });
       it('Should revert when using standard address instead of smart contract address', async function () {
         await expect(giftContract.connect(owner).createGift(addr2.address, [3], goodCodeHash))
@@ -287,33 +287,42 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
   describe('Create a multiple gifts in one tx', function () {
     let unclaimed;
     it('Mint Axies', async function () {
-      await mockAxie.connect(owner).mint(21);
-      await mockAxie.connect(owner).mint(22);
-      await mockAxie.connect(owner).mint(23);
-      await mockAxie.connect(owner).mint(24);
-      await mockAxie.connect(owner).mint(25);
-      await mockAxie.connect(owner).mint(26);
-      await mockAxie.connect(owner).mint(27);
+      for (let i = 21; i <= 100; i++) {
+        await mockAxie.connect(owner).mint(i);
+      }
     });
-    it('Should make 3 gifts at once', async function () {
+    it('Should make many gifts at once', async function () {
       unclaimed = Number((await giftContract.connect(owner).getUnclaimedGifts()).length);
       const bal = Number(await mockAxie.balanceOf(owner.address));
-      const gifts1 = [mockAxie.address, mockAxie.address, mockAxie.address];
-      const gifts2 = [[21, 22, 23, 24], [25], [26, 27]];
+      const gifts1 = [mockAxie.address, mockAxie.address, mockAxie.address, mockAxie.address];
+      const gifts2 = [[21, 22, 23, 24, 28, 29, 30], [25, 31, 32], [26, 27, 33, 34, 35, 36, 37, 38, 39], [40, 41, 42]];
       const gifts3 = [
         ethers.utils.solidityKeccak256(['string'], ['pass1']),
         ethers.utils.solidityKeccak256(['string'], ['pass2']),
         ethers.utils.solidityKeccak256(['string'], ['pass3']),
+        ethers.utils.solidityKeccak256(['string'], ['pass4']),
       ];
 
+      const gifts1b = [mockAxie.address, mockAxie.address, mockAxie.address, mockAxie.address, mockAxie.address, mockAxie.address];
+      const gifts2b = [[43, 44, 45], [46], [47], [48], [49], [50]];
+      const gifts3b = [
+        ethers.utils.solidityKeccak256(['string'], ['pass5']),
+        ethers.utils.solidityKeccak256(['string'], ['pass6']),
+        ethers.utils.solidityKeccak256(['string'], ['pass7']),
+        ethers.utils.solidityKeccak256(['string'], ['pass8']),
+        ethers.utils.solidityKeccak256(['string'], ['pass9']),
+        ethers.utils.solidityKeccak256(['string'], ['pass10']),
+      ];
       await giftContract.connect(owner).createGifts(gifts1, gifts2, gifts3);
+      await giftContract.connect(owner).createGifts(gifts1b, gifts2b, gifts3b);
 
-      expect(await mockAxie.balanceOf(owner.address)).to.equal(bal - 7);
+      expect(await mockAxie.balanceOf(owner.address)).to.equal(bal - 30);
       expect((await giftContract.getGift(code('pass3'))).claimed).to.equal(false);
     });
+
     describe('Reading data', function () {
       it('Should return correct data from getUnclaimedGifts', async function () {
-        expect((await giftContract.connect(owner).getUnclaimedGifts()).length).to.equal(unclaimed + 3);
+        expect((await giftContract.connect(owner).getUnclaimedGifts()).length).to.equal(unclaimed + 10);
       });
       it('Should return correct data from getGift', async function () {
         expect((await giftContract.getGift(code('pass2'))).creator).to.equal(owner.address);
@@ -332,7 +341,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
         bal = Number(await mockAxie.balanceOf(addr1.address));
         await giftContract.connect(addr1).claimGift(code('pass1'), sig);
         expect((await giftContract.getGift(code('pass1'))).claimed).to.equal(true);
-        expect(await mockAxie.balanceOf(addr1.address)).to.equal(bal + 4);
+        expect(await mockAxie.balanceOf(addr1.address)).to.equal(bal + 7);
       });
 
       it('[2/3] Should generate correct claiming signature', async function () {
@@ -346,7 +355,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
         bal = Number(await mockAxie.balanceOf(addr1.address));
         await giftContract.connect(addr1).claimGift(code('pass2'), sig);
         expect((await giftContract.getGift(code('pass2'))).claimed).to.equal(true);
-        expect(await mockAxie.balanceOf(addr1.address)).to.equal(bal + 1);
+        expect(await mockAxie.balanceOf(addr1.address)).to.equal(bal + 3);
       });
 
       it('[3/3] Should revert because of wrong pass', async function () {
@@ -365,9 +374,51 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
         bal = Number(await mockAxie.balanceOf(addr2.address));
         await giftContract.connect(addr2).claimGift(code('pass3'), sig);
         expect((await giftContract.getGift(code('pass3'))).claimed).to.equal(true);
-        expect(await mockAxie.balanceOf(addr2.address)).to.equal(bal + 2);
+        expect(await mockAxie.balanceOf(addr2.address)).to.equal(bal + 9);
       });
-    });
+    })
   });
+  describe('Stress test', function () {
+    it('[x/x] Claim all remaining gifts', async function () {
+      for (let i = 4; i <= 8; i++) {
+        const claimer = (await ethers.getSigners())[i + 5]
+        hash = await giftContract.connect(claimer).getGiftHash('pass' + i);
+        sig = await claimer.signMessage(ethers.utils.arrayify(hash));
+        expect(
+          ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
+        ).to.equal(claimer.address);
+        await giftContract.connect(claimer).claimGift(code('pass' + i), sig);
+        expect((await giftContract.getGift(code('pass' + i))).claimed).to.equal(true);
+      }
+    });
+    it('[x/x] Cancel the rest', async function () {
+      await expect(giftContract.cancelGift(code('pass9'))).to.emit(giftContract, 'GiftCancelled').withArgs(code('pass9'));
+      await expect(giftContract.cancelGift(code('pass10'))).to.emit(giftContract, 'GiftCancelled').withArgs(code('pass10'));
+    })
+    it('Mint A lot of Axies', async function () {
+      for (let i = 101; i <= 300; i++) {
+        await mockAxie.connect(addr1).mint(i);
+      }
+      for (let i = 101; i <= 200; i++) {
+        await giftContract.connect(addr1).createGift(mockAxie.address, [i], code('mass' + i));
+      }
+      for (let i = 150; i <= 200; i++) {
+        await giftContract.connect(addr1).cancelGift(code('mass' + i));
+      }
+      for (let i = 201; i <= 295; i += 3) {
+        await giftContract.connect(addr1).createGift(mockAxie.address, [i, i + 1, i + 2], code('mass' + i));
+      }
+      for (let i = 201; i <= 241; i += 3) {
+        await giftContract.connect(addr1).cancelGift(code('mass' + i));
+      }
+      for (let i = 243; i <= 295; i += 3) {
+        const claimer = (await ethers.getSigners())[i]
+        hash = await giftContract.connect(claimer).getGiftHash('mass' + i);
+        sig = await claimer.signMessage(ethers.utils.arrayify(hash));
+        await giftContract.connect(claimer).claimGift(code('mass' + i), sig);
+        expect((await giftContract.getGift(code('mass' + i))).claimed).to.equal(true);
+      }
 
+    })
+  })
 });
