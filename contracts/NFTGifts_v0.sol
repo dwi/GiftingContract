@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-contract NFTGifts is ERC721Holder {
+contract NFTGifts_v0 is ERC721Holder {
   struct Gift {
     uint256 giftID;
     // Address of the ERC721 contract
@@ -39,10 +39,10 @@ contract NFTGifts is ERC721Holder {
 
   function getGift(
     uint256 _giftID
-  ) public view returns (Gift memory unclaimedGifts) {
+  ) public view returns (Gift memory currentGift) {
     require(allGifts[_giftID].giftID > 0, "NFTGifts: Gift does not exist");
-    unclaimedGifts = allGifts[_giftID];
-    return unclaimedGifts;
+    currentGift = allGifts[_giftID];
+    return currentGift;
   }
 
   function createGift(

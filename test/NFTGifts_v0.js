@@ -5,14 +5,14 @@ const { ethers } = require('hardhat');
 let MockAxie, NFTGifts, owner, addr1, addr2, operator, mockAxie, giftContract;
 var cancelledGiftID;
 
-describe('NFTGifts', function () {
+describe('NFT Gifts v0 - Original version with IDs', function () {
   const goodCode = 'validCode';
   const badCode = 'invalidCode';
   const goodCodeHash = ethers.utils.solidityKeccak256(['string'], [goodCode]);
 
   async function deployTokenFixture() {
     MockAxie = await ethers.getContractFactory('MockAxie');
-    NFTGifts = await ethers.getContractFactory('NFTGifts');
+    NFTGifts = await ethers.getContractFactory('NFTGifts_v0');
     owner = (await ethers.getSigners())[0];
     addr1 = (await ethers.getSigners())[1];
     addr2 = (await ethers.getSigners())[2];
