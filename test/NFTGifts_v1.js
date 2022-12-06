@@ -130,7 +130,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       const giftID = 1;
       let hash, sig, tx;
       it('Should generate correct claiming signature for #1', async function () {
-        hash = await giftContract.connect(addr2).getGiftSignature('1');
+        hash = await giftContract.connect(addr2).getGiftHash('1');
         sig = await addr2.signMessage(ethers.utils.arrayify(hash));
         expect(
           ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
@@ -152,7 +152,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       let hash, sig, bal;
       const giftID = 2;
       it('Should generate correct claiming signature for #2', async function () {
-        hash = await giftContract.connect(addr2).getGiftSignature('2');
+        hash = await giftContract.connect(addr2).getGiftHash('2');
         sig = await addr2.signMessage(ethers.utils.arrayify(hash));
         expect(
           ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
@@ -175,20 +175,20 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       let sig;
       const giftID = 3;
       it('Should revert when trying to generate signature for your own gift', async function () {
-        await expect(giftContract.connect(addr1).getGiftSignature('3')).to.be.revertedWith(
+        await expect(giftContract.connect(addr1).getGiftHash('3')).to.be.revertedWith(
           'NFTGifts: Cannot claim your own gift'
         );
       });
       it('Should revert when trying to use wrong code', async function () {
-        await expect(giftContract.connect(addr2).getGiftSignature(code('3'))).to.be.revertedWith(
+        await expect(giftContract.connect(addr2).getGiftHash(code('3'))).to.be.revertedWith(
           'NFTGifts: Invalid secret code'
         );
-        await expect(giftContract.connect(addr2).getGiftSignature('x')).to.be.revertedWith(
+        await expect(giftContract.connect(addr2).getGiftHash('x')).to.be.revertedWith(
           'NFTGifts: Invalid secret code'
         );
       });
       it('Should revert when trying to generate signature for already claimed gift', async function () {
-        sig = giftContract.connect(addr1).getGiftSignature('1');
+        sig = giftContract.connect(addr1).getGiftHash('1');
         await expect(sig).to.be.revertedWith('NFTGifts: Gift has already been claimed');
       });
       it('Should revert when trying to claim claimed gift with already used signature', async function () {
@@ -197,7 +197,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
         );
       });
       it('Should revert when trying to generate signature for non existing or deleted gift', async function () {
-        await expect(giftContract.connect(addr1).getGiftSignature('unknown')).to.be.revertedWith(
+        await expect(giftContract.connect(addr1).getGiftHash('unknown')).to.be.revertedWith(
           'NFTGifts: Invalid secret code'
         );
       });
@@ -211,7 +211,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       expect(await mockAxie.balanceOf(owner.address)).to.equal(bal - 1);
     });
     it('Should generate correct claiming signature for #4', async function () {
-      hash = await giftContract.connect(addr2).getGiftSignature('4');
+      hash = await giftContract.connect(addr2).getGiftHash('4');
       sig = await addr2.signMessage(ethers.utils.arrayify(hash));
       expect(
         ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
@@ -226,7 +226,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       expect(await mockAxie.balanceOf(owner.address)).to.equal(bal + 1);
     });
     it('Should not be able to generate signature for cancelled gift', async function () {
-      await expect(giftContract.connect(addr2).getGiftSignature('4')).to.be.revertedWith(
+      await expect(giftContract.connect(addr2).getGiftHash('4')).to.be.revertedWith(
         'NFTGifts: Invalid secret code'
       );
     });
@@ -260,7 +260,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
         );
       });
       it('Should not be able to generate signature for cancelled gift', async function () {
-        await expect(giftContract.connect(addr2).getGiftSignature('4')).to.be.revertedWith(
+        await expect(giftContract.connect(addr2).getGiftHash('4')).to.be.revertedWith(
           'NFTGifts: Invalid secret code'
         );
       });
@@ -273,7 +273,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       });
       it('Should revert because already claimed', async function () {
         await expect(giftContract.cancelGift(code('1'))).to.be.revertedWith(
-          'NFTGifts: The gift has already been redeemed'
+          'NFTGifts: The gift has already been claimed'
         );
       });
       it('Should revert because gift already cancelled', async function () {
@@ -317,12 +317,12 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       });
       it('Should return correct data from getGift', async function () {
         expect((await giftContract.getGift(code('pass2'))).creator).to.equal(owner.address);
-        expect((await giftContract.getGift(code('pass3'))).exists).to.equal(true);
+        expect((await giftContract.getGift(code('pass3'))).claimed).to.equal(false);
       });
     });
     describe('Claim gifts created by createGifts()', function () {
       it('[1/3] Should generate correct claiming signature', async function () {
-        hash = await giftContract.connect(addr1).getGiftSignature('pass1');
+        hash = await giftContract.connect(addr1).getGiftHash('pass1');
         sig = await addr1.signMessage(ethers.utils.arrayify(hash));
         expect(
           ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
@@ -336,7 +336,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       });
 
       it('[2/3] Should generate correct claiming signature', async function () {
-        hash = await giftContract.connect(addr1).getGiftSignature('pass2');
+        hash = await giftContract.connect(addr1).getGiftHash('pass2');
         sig = await addr1.signMessage(ethers.utils.arrayify(hash));
         expect(
           ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
@@ -350,12 +350,12 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       });
 
       it('[3/3] Should revert because of wrong pass', async function () {
-        await expect(giftContract.connect(addr2).getGiftSignature('wrongpass')).to.be.revertedWith(
+        await expect(giftContract.connect(addr2).getGiftHash('wrongpass')).to.be.revertedWith(
           'NFTGifts: Invalid secret code'
         );
       });
       it('[3/3] Should generate correct claiming signature', async function () {
-        hash = await giftContract.connect(addr2).getGiftSignature('pass3');
+        hash = await giftContract.connect(addr2).getGiftHash('pass3');
         sig = await addr2.signMessage(ethers.utils.arrayify(hash));
         expect(
           ethers.utils.recoverAddress(ethers.utils.arrayify(ethers.utils.hashMessage(ethers.utils.arrayify(hash))), sig)
