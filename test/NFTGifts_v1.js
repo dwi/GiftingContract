@@ -97,8 +97,7 @@ describe('NFTGifts v1 - Use hashed code everywhere', function () {
       });
       it('Should revert when using standard address instead of smart contract address', async function () {
         await expect(giftContract.connect(owner).createGift(addr2.address, [3], goodCodeHash))
-          .to.be.revertedWith('function call to a non-contract account')
-          .revertedWithoutReason();
+          .to.be.revertedWith('NFTGifts: Invalid NFT contract address')
       });
       it('Should revert when gifting owned token ID but gift contract is not approved', async function () {
         await expect(giftContract.connect(addr2).createGift(mockAxie.address, [15], goodCodeHash)).to.be.revertedWith(

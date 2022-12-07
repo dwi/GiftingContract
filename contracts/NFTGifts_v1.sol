@@ -21,13 +21,6 @@ contract NFTGifts_v1 is ERC721Holder {
     address creator; // Address of the Gift creator
   }
 
-  struct GiftPublic {
-    address tokenAddress; // Address of the ERC721 contract
-    uint256[] tokenIDs; // Array of NFT token IDs that are part of this Gift
-    bool claimed; // Flag to track if the Gift has been claimed
-    address creator; // Address of the Gift creator
-  }
-
   mapping(bytes32 => Gift) private allGifts; // Mapping from secret hash to gift information
 
   // need this to keep index of all gifts so I can easily find unclaimed gifts made by certain address (getUnclaimedGifts)
@@ -73,7 +66,7 @@ contract NFTGifts_v1 is ERC721Holder {
   ) public {
     // Ensure that the given NFT contract address is valid
     require(
-      _tokenAddress != address(0),
+      _tokenAddress.code.length > 0,
       "NFTGifts: Invalid NFT contract address"
     );
 
@@ -112,8 +105,6 @@ contract NFTGifts_v1 is ERC721Holder {
     allGifts[_hashedSecret].creator = msg.sender;
     allGifts[_hashedSecret].tokenAddress = _tokenAddress;
     allGifts[_hashedSecret].tokenIDs = _tokenIDs;
-    allGifts[_hashedSecret].claimed = false;
-    allGifts[_hashedSecret].cancelled = false;
 
     emit GiftCreated(_hashedSecret, msg.sender, _tokenAddress, _tokenIDs);
   }
@@ -146,52 +137,31 @@ contract NFTGifts_v1 is ERC721Holder {
   }
 
   /**
-   * @dev Retrieves the public information of a gift by hashed secret code.
+   * @dev Retrieves the information of a gift by hashed secret code.
    *
    * @param _hashedSecret Sharing "code" hashed by keccak256
-   * @return The public information of the gift ([tokenAddress, tokenIDs, claimed, creator])
+   * @return currentGift The information of the gift
    *
    */
   function getGift(
     bytes32 _hashedSecret
-  ) external view returns (GiftPublic memory) {
+  ) external view returns (Gift memory currentGift) {
     // Retrieve the current gift from the mapping.
-    Gift memory currentGift = allGifts[_hashedSecret];
+    currentGift = allGifts[_hashedSecret];
 
     // Check if the gift exists and has not been cancelled.
     require(
       currentGift.creator != address(0) && currentGift.cancelled == false,
       "NFTGifts: Invalid secret code"
     );
-
-    // Return a stripped version of the gift that only contains public information.
-    return stripGift(currentGift);
-  }
-
-  /**
-   * @dev Strips a gift of any sensitive/useless information
-   *
-   * @param _gift The gift to be stripped.
-   * @return GiftPublic structure
-   */
-  function stripGift(
-    Gift memory _gift
-  ) private pure returns (GiftPublic memory) {
-    return
-      GiftPublic(
-        _gift.tokenAddress,
-        _gift.tokenIDs,
-        _gift.claimed,
-        _gift.creator
-      );
   }
 
   /**
    * @dev Claims a gift using its secret and a signed message from the recipient.
-   *    
+   *
    * Requirements:
    * - Valid _hashedSecret and user _signature of unclaimed gift
-   * 
+   *
    * @param _hashedSecret Sharing "code" hashed by keccak256
    * @param _signature The signed message from the recipient of the gift.
    */
@@ -238,10 +208,10 @@ contract NFTGifts_v1 is ERC721Holder {
   /**
    * @dev Get all unclaimed gifts created by a given address
    *
-   * @return The list of all unclaimed gifts for caller's address in its public form
+   * @return The list of all active unclaimedd gifts for caller's address
    *
    */
-  function getUnclaimedGifts() external view returns (GiftPublic[] memory) {
+  function getUnclaimedGifts() external view returns (Gift[] memory) {
     Gift[] memory GiftsTemp = new Gift[](allGiftsIndex.length);
     uint256 count;
     for (uint _i = 0; _i < allGiftsIndex.length; _i++) {
@@ -255,19 +225,19 @@ contract NFTGifts_v1 is ERC721Holder {
       }
     }
 
-    GiftPublic[] memory unclaimedGifts = new GiftPublic[](count);
+    Gift[] memory unclaimedGifts = new Gift[](count);
     for (uint256 _i = 0; _i < count; _i++) {
-      unclaimedGifts[_i] = stripGift(GiftsTemp[_i]);
+      unclaimedGifts[_i] = GiftsTemp[_i];
     }
     return unclaimedGifts;
   }
 
   /**
    * @dev Cancel a gift created by a caller
-   * 
+   *
    * Requirements:
    * - Valid _hashedSecret of unclaimed active gift
-   * 
+   *
    * @param _hashedSecret Sharing "code" hashed by keccak256
    *
    */
@@ -308,7 +278,7 @@ contract NFTGifts_v1 is ERC721Holder {
   /**
    * @dev Generate the verification hash that claimer has to sign and use
    * in claimGift to claim the gift.
-   * 
+   *
    * @param _plainSecret The secret code of the gift in plain format
    * @return Gift hash
    */
@@ -345,7 +315,7 @@ contract NFTGifts_v1 is ERC721Holder {
 
   /**
    * @dev Returns the address of the signer of the given _hashedSecret and _signature.
-   * 
+   *
    * @param _hashedSecret Sharing "code" hashed by keccak256
    * @param _signature The signature.
    * @return The address of the signer.
