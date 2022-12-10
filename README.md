@@ -2,17 +2,34 @@
 
 - `creator` - person who is giving away ERC721's by sharing a `secret sharing code` with receiver
 - `receiver` - the person who has secret sharing code and is allowed to claim a gift
+- `sharing code` - a set of random/custom strings used as a base "salt" to generate a private key of a `verifier`
+- `verifier` - signer used in a verification process to verify the validity of a gift and receiver
 
 ## Gift+Claim flow
-- Creator makes a gift with Axies and hashed `secret sharing code` stored in sc. Plain `secret sharing code` is given to receiver
-- Receiver will use `getGiftHash` read only function with plain `secret sharing code` parameter to get the claiming hash
-- He signs the claiming hash and now this signature can be use by him or any "operator" (if he is without any RON for gas fees) to claim the gift with `claimGift` - Gift Axies are transfered to receiver
+- `Creator` makes a gift with Axies and address of a verifier (verifier is generated in UI based on provided custom `sharing code` or randomly generated `sharing code`)
+- `Creator` shares `sharing code` with a receiver
+- `Receiver` will sign his receiving address and gift ID with the `verifier` private key obtained from `sharing code`
+- This signature can be use by him or any "operator" (if he is without any RON for gas fees) to claim the gift with `claimGift(giftID, receiver, signature)` - The gift is transfered to receiver
 
-![image](https://user-images.githubusercontent.com/1337260/206153538-2716c9af-469a-4b21-9a0c-9d29a6890c02.png)
+![image](https://user-images.githubusercontent.com/1337260/206867935-b32edc3a-4dcd-4fe6-bc25-5a512c4d03b8.png)
+
+
 
 ## Concerns
 
-### Cancelled  gifts
-- I probably want to keep `_hashedSecret` of cancelled gifts somewhere so another gift can't be used with the same passcode. For now I am checking for `allGifts[_hashedSecret].cancelled` in multiple parts of the contract but I also keep all hashes in `allGiftsIndex` to be able to look up all unclaimed gifts by its creator (function `getUnclaimedGifts`). Feels a little clunky so maybe the solution would be to delete `allGifts[_hashedSecret]` from mapping when gift is cancelled and check for already used `_hashedSecret` in the `allGiftsIndex` array - but that can be really gas heavy and not worthy at all
+### #1 The size of `allGifts` mapping
+- All active/claimed/cancelled gifts are stored there. Should we worry about the potential size? I could in theory remove claimed/cancelled gifts from the mapping to reduce the size if this is a valid concern. The downside would the that `receiver` will not know the reason why he cannot claim his gift (creator cancelled it or someone else claimed it quicker?)
 
-- I used two structures `Gift` and `GiftPublic` to hide the `cancelled` value from public facing responses. This is probably not needed and makes the contract a bit more complicated than necessary. Originally I made it for security purposes to not disclose cancelled gifts but I may need to know this status to tell `receiver` exact reason, why he cannot claim a gift (e.g. someone was faster or creator cancelled the gift before he was able to claim it)
+### #2 The size of `allVerifiers` mapping
+- Over time it will collect addresses of all used verifiers in the past (for active/claimed/cancelled gifts). The purpose is to block re-use of already used verifiers. If this is a valid concern then I could delete verifiers when gift is being cancelled or claimed.
+
+### #3 Giving away too much info could benefit attackers?
+- Should `getGift` return cancelled/claimed gifts?
+- Should `cancelGift` and `claimGift` revert with specific reasons why gift cannot be cancelled/claimed? (already claimed/cancelled)?
+
+### #4 "Cannot claim your own gift"
+- Maybe this is completely pointless check and removing it could save some gas.
+
+### #5 Any missing/useless functions?
+- New function to cancel all pending unclaimed gifts in one tx?
+- Should probably remove `getGiftID` for security reasons (used only in unit tests)
