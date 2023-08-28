@@ -67,4 +67,3 @@
 
 - Should we add an onlyOwner function to cancel gifts on behalf of someone else?
 - Should the contract be pausable?
-

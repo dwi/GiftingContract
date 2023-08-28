@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { HardhatUserConfig } from 'hardhat/config';
+import 'hardhat-deploy';
 import '@nomicfoundation/hardhat-toolbox';
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
@@ -18,7 +19,7 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       accounts: {
-        count: 1000,
+        count: 11,
       },
     },
     ronin: {
@@ -31,6 +32,9 @@ const config: HardhatUserConfig = {
       url: 'https://saigon-testnet.roninchain.com/rpc',
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : { mnemonic: DEFAULT_MNEMONIC },
     },
+  },
+  namedAccounts: {
+    deployer: 0,
   },
   gasReporter: {
     excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721', 'MockAtiaShrine'],
