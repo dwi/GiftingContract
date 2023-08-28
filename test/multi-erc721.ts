@@ -3,9 +3,9 @@ import { ethers } from 'hardhat';
 import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers';
 import { Address } from 'viem';
-import { getVerifierAndCode, signData } from '../utils/cryptography';
-import { deployContracts } from '../utils/deployTokenFixture';
-import { getGiftIDfromTx } from '../utils/helpers';
+import { getVerifierAndCode, signData } from './utils/cryptography';
+import { deployContracts } from './utils/deployTokenFixture';
+import { getGiftIDfromTx } from './utils/helpers';
 
 let owner: HardhatEthersSigner,
   addr1: HardhatEthersSigner,
