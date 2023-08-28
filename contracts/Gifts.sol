@@ -65,8 +65,6 @@ contract Gifts is ERC721Holder, Ownable {
     emit ControllerUpdated(_restrictionController);
   }
 
-  receive() external payable {}
-
   /**
    * @dev Event emitted when a new gift is created
    */
