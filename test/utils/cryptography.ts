@@ -11,37 +11,26 @@ export const generateId = (len: number) => {
   return Array.from(arr, dec2hex).join('');
 };
 
+// Simplified version
 export const getVerifierAndCode = (customCode?: string) => {
   const secret = customCode === '' || !customCode ? generateId(16) : customCode;
-  const index = 1;
-
-  // if Saigon, prefix the code with 's'
-  const encodedCode = `${Number(index).toString(16)}_${secret}`;
 
   return {
-    verifier: getWalletFromCode(encodedCode).verifier,
-    code: encodedCode,
+    verifier: getWalletFromCode(secret).verifier,
+    code: secret,
   };
 };
 
 export const getWalletFromCode = (code: string) => {
-  const [idHex, secret] = code.split('_');
-  const id = parseInt(idHex, 16);
-
-  const rawBytes = new TextEncoder().encode(secret);
-
+  const rawBytes = new TextEncoder().encode(code);
   const encodedSecret = toHex(rawBytes).slice(2);
-  const randomPath = "m/44'/60'/0'/" + id;
-
   const decodedSecretBytes = toBytes('0x' + encodedSecret);
   let padding: number[] = [];
   if (decodedSecretBytes.length < 64) {
     padding = [...Array.from(Array(64 - decodedSecretBytes.length).keys()).map(() => 0)];
   }
   const seed = [...padding, ...decodedSecretBytes];
-  const verifier = hdKeyToAccount(HDKey.fromMasterSeed(Uint8Array.from(seed)), {
-    path: randomPath as `m/44'/60'/${string}`,
-  });
+  const verifier = hdKeyToAccount(HDKey.fromMasterSeed(Uint8Array.from(seed)));
   return { verifier };
 };
 
