@@ -5,7 +5,6 @@ import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers';
 import { Address, encodePacked } from 'viem';
 import { getVerifierAndCode, signData } from './utils/cryptography';
 import { deployContracts } from './utils/deployTokenFixture';
-import { getGiftIDfromTx } from './utils/helpers';
 
 let owner: HardhatEthersSigner,
   addr1: HardhatEthersSigner,
@@ -21,21 +20,20 @@ let owner: HardhatEthersSigner,
   restrictionControl: any,
   newRestrictionControll: any;
 
-const { verifier: mockVerifier, code: mockEncodedSecret } = getVerifierAndCode('mockCode');
-const { verifier: dummyVerifier, code: dummyEncodedSecret } = getVerifierAndCode('random');
-
 const createRandomSingleERC721Gift = async (owner: any, code: string, args?: { id: string; args: string }[]) => {
   const randomId = Math.floor(Math.random() * (1000000 - 100000)) + 100000;
   const { verifier } = getVerifierAndCode(code);
   await mockAxie.connect(owner).mint(randomId);
+  const gift = [
+    {
+      assetContract: mockAxie.address,
+      tokenId: randomId,
+      amount: 0,
+    },
+  ];
   const tx = args
-    ? giftContract['createGift(address[],uint256[],(string,bytes)[],address)'](
-        [mockAxie.address],
-        [randomId],
-        args,
-        verifier.address,
-      )
-    : giftContract.createGift([mockAxie.address], [randomId], verifier.address);
+    ? giftContract['createGift((address,uint256,uint256)[],(string,bytes)[],address)'](gift, args, verifier.address)
+    : giftContract.createGift(gift, verifier.address);
   return tx;
 };
 

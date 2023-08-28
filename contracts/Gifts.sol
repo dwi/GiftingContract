@@ -4,11 +4,14 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./Interfaces/IRestrictionControl.sol";
-import "./InterfaceChecker.sol";
+import "./lib/InterfaceChecker.sol";
+import "./lib/CurrencyTransferLib.sol";
+
 import "hardhat/console.sol";
 
 /**
@@ -18,7 +21,7 @@ import "hardhat/console.sol";
  * @dev Allows trustlessly give ERC721/ERC20 gifts to not yet known recepients.
  *
  */
-contract Gifts is ERC721Holder, Ownable {
+contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   using InterfaceChecker for address;
 
   struct Restriction {
@@ -26,10 +29,15 @@ contract Gifts is ERC721Holder, Ownable {
     bytes args;
   }
 
+  struct Token {
+    address assetContract;
+    uint256 tokenId;
+    uint256 amount;
+  }
+
   struct Gift {
     uint256 giftID;
-    address[] tokenAddresses; // Address of the ERC721/ERC20 contract
-    uint256[] tokenIDsOrAmounts; // Array of NFT token IDs or ERC20 amounts that are part of this Gift
+    Token[] tokens;
     bool claimed; // Flag to track if the Gift has been claimed
     bool cancelled; // Flag to track if the Gift has been cancelled
     address creator; // Address of the Gift creator
@@ -43,12 +51,14 @@ contract Gifts is ERC721Holder, Ownable {
 
   uint256 private giftCounter;
   IRestrictionControl private restrictionController;
+  address internal immutable nativeTokenWrapper;
 
   /**
    * @dev Constructor function
    * @param _restrictionController The address of the access control contract
    */
-  constructor(address _restrictionController) {
+  constructor(address _nativeTokenWrapper, address _restrictionController) {
+    nativeTokenWrapper = _nativeTokenWrapper;
     restrictionController = IRestrictionControl(_restrictionController);
   }
 
@@ -67,14 +77,9 @@ contract Gifts is ERC721Holder, Ownable {
 
   /**
    * @dev Event emitted when a new gift is created
+   * @notice Removed emitting of individual token contained in the gift
    */
-  event GiftCreated(
-    uint256 indexed _giftID,
-    address indexed _createdBy,
-    address[] _tokenAddresses,
-    uint256[] _tokenIDsOrAmounts,
-    uint _createdAt
-  );
+  event GiftCreated(uint256 indexed _giftID, address indexed _createdBy, uint _createdAt);
 
   /**
    * @dev Event emitted when a gift is claimed
@@ -99,45 +104,28 @@ contract Gifts is ERC721Holder, Ownable {
    * - This contract is approved on token contract
    * - valid and unique _verifier
    *
-   * @param _tokenAddresses Addresses of ERC721/ERC20 Tokens
-   * @param _tokenIDsOrAmounts An array of token IDs or ERC20 amounts
+   * @param _tokens Array of Token structs
    * @param _verifier Address of a verifier
    *
    */
-  function createGift(
-    address[] calldata _tokenAddresses,
-    uint256[] calldata _tokenIDsOrAmounts,
-    Restriction[] memory _restrictions,
-    address _verifier
-  ) public {
+  function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public {
     require(_verifier != address(0), "NFTGifts: Invalid verifier address");
     require(allVerifiers[_verifier] == 0, "NFTGifts: Sharing code already used");
-    uint _tokenAddressesLength = _tokenAddresses.length;
-    uint _tokenIDsOrAmountsLength = _tokenIDsOrAmounts.length;
-    require(_tokenAddressesLength == _tokenIDsOrAmountsLength, "NFTGifts: Arrays must be of the same length");
-
-    // Transfer NFTs/ERC20 tokens to smart contract
-    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
-    // TODO: ADD (W)RON support with automated (un)wrapping
-    for (uint256 _i = 0; _i < _tokenAddressesLength; _i++) {
-      address tokenAddress = _tokenAddresses[_i];
-      uint256 tokenIDsOrAmounts = _tokenIDsOrAmounts[_i];
-      if (tokenAddress.isERC721()) {
-        ERC721(tokenAddress).safeTransferFrom(msg.sender, address(this), tokenIDsOrAmounts);
-      } else if (tokenAddress.isERC20()) {
-        require(tokenIDsOrAmounts > 0, "ERC20 amount is 0");
-        ERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenIDsOrAmounts);
-      }
-    }
+    uint _tokensLength = _tokens.length;
 
     // Generate a unique gift ID
     giftCounter++;
     uint256 giftID = giftCounter;
 
+    // Transfer NFTs/ERC20 tokens to smart contract
+    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
+    // TODO: ADD (W)RON support with automated (un)wrapping
+    for (uint256 _i = 0; _i < _tokensLength; _i++) {
+      allGifts[giftID].tokens.push(_tokens[_i]);
+    }
+
     // Save the gift information
     allGifts[giftID].creator = msg.sender;
-    allGifts[giftID].tokenAddresses = _tokenAddresses;
-    allGifts[giftID].tokenIDsOrAmounts = _tokenIDsOrAmounts;
     allGifts[giftID].createdAt = block.timestamp;
     allGifts[giftID].giftID = giftID;
 
@@ -155,23 +143,20 @@ contract Gifts is ERC721Holder, Ownable {
 
     allVerifiers[_verifier] = giftID;
 
-    emit GiftCreated(giftID, msg.sender, _tokenAddresses, _tokenIDsOrAmounts, block.timestamp);
+    _transferTokenBatch(msg.sender, address(this), _tokens);
+
+    emit GiftCreated(giftID, msg.sender, block.timestamp);
   }
 
   /**
    * @dev Create a new gift with no restrictions
    *
-   * @param _tokenAddresses Addresses of ERC721/ERC20 Tokens
-   * @param _tokenIDsOrAmounts An array of token IDs or ERC20 amounts
+   * @param _tokens Array of Token structs
    * @param _verifier Address of a verifier
    *
    */
-  function createGift(
-    address[] calldata _tokenAddresses,
-    uint256[] calldata _tokenIDsOrAmounts,
-    address _verifier
-  ) public {
-    createGift(_tokenAddresses, _tokenIDsOrAmounts, new Restriction[](0), _verifier);
+  function createGift(Token[] calldata _tokens, address _verifier) public {
+    createGift(_tokens, new Restriction[](0), _verifier);
   }
 
   /**
@@ -180,27 +165,25 @@ contract Gifts is ERC721Holder, Ownable {
    * Requirements:
    * - Array sizes has to match
    *
-   * @param _tokenAddresses Array of ERC721/ERC20 Token addresses
-   * @param _tokenIDsOrAmounts Array of arrays of token IDs or ERC20 amounts
+   * @param _tokensArray  Array of Token[] structs
    * @param _verifier Address of a verifier
    *
    */
   function createGifts(
     // always has to have restrictions, even empty
-    address[][] calldata _tokenAddresses,
-    uint256[][] calldata _tokenIDsOrAmounts,
+    Token[][] calldata _tokensArray,
     Restriction[][] memory _restrictions,
     address[] calldata _verifier
   ) external {
-    uint arrayLength = _tokenAddresses.length;
+    uint arrayLength = _tokensArray.length;
     require(
-      _tokenIDsOrAmounts.length == arrayLength && _verifier.length == arrayLength,
+      _tokensArray.length == arrayLength && _verifier.length == arrayLength,
       "NFTGifts: Arrays must be of the same length"
     );
 
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
     for (uint256 _i = 0; _i < arrayLength; _i++) {
-      createGift(_tokenAddresses[_i], _tokenIDsOrAmounts[_i], _restrictions[_i], _verifier[_i]);
+      createGift(_tokensArray[_i], _restrictions[_i], _verifier[_i]);
     }
   }
 
@@ -258,18 +241,7 @@ contract Gifts is ERC721Holder, Ownable {
     }
 
     // Transfer NFTs to the recipient of the gift.
-    uint256 arrayLength = currentGift.tokenIDsOrAmounts.length;
-    for (uint256 _i = 0; _i < arrayLength; _i++) {
-      if (currentGift.tokenAddresses[_i].isERC721()) {
-        ERC721(currentGift.tokenAddresses[_i]).safeTransferFrom(
-          address(this),
-          _receiver,
-          currentGift.tokenIDsOrAmounts[_i]
-        );
-      } else if (currentGift.tokenAddresses[_i].isERC20()) {
-        ERC20(currentGift.tokenAddresses[_i]).transfer(_receiver, currentGift.tokenIDsOrAmounts[_i]);
-      }
-    }
+    _transferTokenBatch(address(this), _receiver, currentGift.tokens);
 
     // Mark the gift as claimed
     allGifts[_giftID].claimed = true;
@@ -320,18 +292,7 @@ contract Gifts is ERC721Holder, Ownable {
     require(currentGift.creator == msg.sender, "NFTGifts: Only gift creator can cancel the gift");
 
     // Transfer the NFTs back to the gift creator
-    uint256 arrayLength = currentGift.tokenIDsOrAmounts.length;
-    for (uint256 _i = 0; _i < arrayLength; _i++) {
-      if (currentGift.tokenAddresses[_i].isERC721()) {
-        ERC721(currentGift.tokenAddresses[_i]).safeTransferFrom(
-          address(this),
-          currentGift.creator,
-          currentGift.tokenIDsOrAmounts[_i]
-        );
-      } else if (currentGift.tokenAddresses[_i].isERC20()) {
-        ERC20(currentGift.tokenAddresses[_i]).transfer(currentGift.creator, currentGift.tokenIDsOrAmounts[_i]);
-      }
-    }
+    _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
 
     // Mark the gift as cancelled
     allGifts[_giftID].cancelled = true;
@@ -351,6 +312,43 @@ contract Gifts is ERC721Holder, Ownable {
     require(arrayLength <= 50, "NFTGifts: Too many gifts to cancel");
     for (uint256 _i = 0; _i < arrayLength; _i++) {
       cancelGift(_giftIDs[_i]);
+    }
+  }
+
+  /// @dev Transfers an arbitrary ERC20 / ERC721 / ERC1155 token.
+  function _transferToken(address _from, address _to, Token memory _token) internal {
+    if (_token.assetContract.isERC20()) {
+      CurrencyTransferLib.transferCurrencyWithWrapper(
+        _token.assetContract,
+        _from,
+        _to,
+        _token.amount,
+        nativeTokenWrapper
+      );
+    } else if (_token.assetContract.isERC721()) {
+      IERC721(_token.assetContract).safeTransferFrom(_from, _to, _token.tokenId);
+    } else if (_token.assetContract.isERC1155()) {
+      IERC1155(_token.assetContract).safeTransferFrom(_from, _to, _token.tokenId, _token.amount, "");
+    }
+  }
+
+  /// @dev Transfers multiple arbitrary ERC20 / ERC721 / ERC1155 tokens.
+  function _transferTokenBatch(address _from, address _to, Token[] memory _tokens) internal {
+    uint256 nativeTokenValue;
+    for (uint256 i = 0; i < _tokens.length; i += 1) {
+      if (_tokens[i].assetContract == CurrencyTransferLib.NATIVE_TOKEN && _to == address(this)) {
+        nativeTokenValue += _tokens[i].amount;
+      } else {
+        _transferToken(_from, _to, _tokens[i]);
+      }
+    }
+    if (nativeTokenValue != 0) {
+      Token memory _nativeToken = Token({
+        assetContract: CurrencyTransferLib.NATIVE_TOKEN,
+        tokenId: 0,
+        amount: nativeTokenValue
+      });
+      _transferToken(_from, _to, _nativeToken);
     }
   }
 

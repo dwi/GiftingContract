@@ -37,7 +37,7 @@ const config: HardhatUserConfig = {
     deployer: 0,
   },
   gasReporter: {
-    excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721', 'MockAtiaShrine'],
+    excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721', 'MockAtiaShrine', 'MockWRON', 'ERC1155'],
     gasPrice: 20,
     enabled: true,
   },

@@ -5,7 +5,6 @@ import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers';
 import { Address, encodePacked } from 'viem';
 import { getVerifierAndCode, signData } from './utils/cryptography';
 import { deployContracts } from './utils/deployTokenFixture';
-import { getGiftIDfromTx } from './utils/helpers';
 
 let owner: HardhatEthersSigner,
   addr1: HardhatEthersSigner,
@@ -18,24 +17,24 @@ let owner: HardhatEthersSigner,
   mockUSDC: any,
   mockAXS: any,
   mockAtia: any,
+  mockWRON: any,
   restrictionControl: any,
   newRestrictionControll: any;
-
-const { verifier: mockVerifier, code: mockEncodedSecret } = getVerifierAndCode('mockCode');
-const { verifier: dummyVerifier, code: dummyEncodedSecret } = getVerifierAndCode('random');
 
 const createRandomSingleERC721Gift = async (owner: any, code: string, args?: { id: string; args: string }[]) => {
   const randomId = Math.floor(Math.random() * (1000000 - 100000)) + 100000;
   const { verifier } = getVerifierAndCode(code);
   await mockAxie.connect(owner).mint(randomId);
+  const gift = [
+    {
+      assetContract: mockAxie.address,
+      tokenId: randomId,
+      amount: 0,
+    },
+  ];
   const tx = args
-    ? giftContract['createGift(address[],uint256[],(string,bytes)[],address)'](
-        [mockAxie.address],
-        [randomId],
-        args,
-        verifier.address,
-      )
-    : giftContract.createGift([mockAxie.address], [randomId], verifier.address);
+    ? giftContract['createGift((address,uint256,uint256)[],(string,bytes)[],address)'](gift, args, verifier.address)
+    : giftContract.createGift(gift, verifier.address);
   return tx;
 };
 
@@ -58,16 +57,19 @@ describe('Gifts: Test restriction controller upgrade', async function () {
     mockWETH = x.mockWETH;
     mockUSDC = x.mockUSDC;
     mockAXS = x.mockAXS;
+    mockWRON = x.mockWRON;
 
-    // Restriction Control
+    // Legacy Restriction Control
     restrictionControl = await (
       await ethers.getContractFactory('LegacyRestrictionControl')
     ).deploy(await mockAtia.getAddress());
     await restrictionControl.waitForDeployment();
     restrictionControl.address = await restrictionControl.getAddress();
 
-    // Gift Contract
-    giftContract = await (await ethers.getContractFactory('Gifts')).deploy(restrictionControl.address);
+    // Gift Contract using legacy controller
+    giftContract = await (
+      await ethers.getContractFactory('Gifts')
+    ).deploy(mockWRON.address, restrictionControl.address);
     await giftContract.waitForDeployment();
     giftContract.address = await giftContract.getAddress();
 
@@ -81,67 +83,74 @@ describe('Gifts: Test restriction controller upgrade', async function () {
     await mockAxie.setApprovalForAll(giftContract.address, true);
     expect(await mockAxie.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
   });
+  it('Create a random gift with existing restriction', async function () {
+    const restrictions = [
+      {
+        id: 'hasBlessingStreak',
+        args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['uint256'], [10]) as Address]),
+      },
+    ];
+    const tx = createRandomSingleERC721Gift(owner, '1', restrictions);
+    expect(tx);
+  });
+  it('Create gift - Should revert: Invalid Restriction', async function () {
+    const restrictions = [
+      {
+        id: 'hasBlessingStatus',
+        args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['bool'], [true]) as Address]),
+      },
+    ];
+    const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
+    await expect(tx).to.be.revertedWith('Invalid Restriction');
+  });
+  it('Should deploy new controller version', async function () {
+    const RestrictionControl = await ethers.getContractFactory('RestrictionControl');
+    newRestrictionControll = await RestrictionControl.deploy(await mockAtia.getAddress());
+    await newRestrictionControll.waitForDeployment();
+  });
+  it('Should revert updateController: onlyOwner', async function () {
+    await expect(
+      giftContract.connect(addr1).updateController(await newRestrictionControll.getAddress()),
+    ).to.be.revertedWith('Ownable: caller is not the owner');
+  });
+  it('Should revert updateController: wrong address', async function () {
+    await expect(giftContract.updateController(ethers.Wallet.createRandom().address)).to.be.revertedWith(
+      'Invalid contract address',
+    );
+  });
+  it('Should revert updateController: wrong contract', async function () {
+    await expect(giftContract.updateController(await giftContract.getAddress())).to.be.revertedWith(
+      'Invalid interface',
+    );
+  });
+  it('Should correctly change restriction control address', async function () {
+    const newController = await newRestrictionControll.getAddress();
+    await expect(giftContract.updateController(newController))
+      .to.emit(giftContract, 'ControllerUpdated')
+      .withArgs(newController);
+  });
+  it('Should properly create a new gift with newly added restriction', async function () {
+    const restrictions = [
+      {
+        id: 'hasBlessingStatus',
+        args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['bool'], [true]) as Address]),
+      },
+    ];
+    const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
+    await expect(await tx);
+  });
 
-  describe('Deploy New Restriction Control version', function () {
-    it('Should Create a #8 gift: Invalid Restriction', async function () {
-      const restrictions = [
-        {
-          id: 'hasBlessingStatus',
-          args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['bool'], [true]) as Address]),
-        },
-      ];
-      const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
-      await expect(tx).to.be.revertedWith('Invalid Restriction');
-    });
-    it('Should deploy new version', async function () {
-      const RestrictionControl = await ethers.getContractFactory('RestrictionControl');
-      newRestrictionControll = await RestrictionControl.deploy(await mockAtia.getAddress());
-      await newRestrictionControll.waitForDeployment();
-    });
-    it('Should revert - onlyOwner', async function () {
-      await expect(
-        giftContract.connect(addr1).updateController(await newRestrictionControll.getAddress()),
-      ).to.be.revertedWith('Ownable: caller is not the owner');
-    });
-    it('Update revert - wrong address', async function () {
-      await expect(giftContract.updateController(ethers.Wallet.createRandom().address)).to.be.revertedWith(
-        'Invalid contract address',
-      );
-    });
-    it('Update revert - wrong contract', async function () {
-      await expect(giftContract.updateController(await giftContract.getAddress())).to.be.revertedWith(
-        'Invalid interface',
-      );
-    });
-    it('Should change restriction control address', async function () {
-      const newController = await newRestrictionControll.getAddress();
-      await expect(giftContract.updateController(newController))
-        .to.emit(giftContract, 'ControllerUpdated')
-        .withArgs(newController);
-    });
-    it('Should Create a #11 gift: Newly added restriction', async function () {
-      const restrictions = [
-        {
-          id: 'hasBlessingStatus',
-          args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['bool'], [true]) as Address]),
-        },
-      ];
-      const tx = createRandomSingleERC721Gift(owner, '11', restrictions);
-      await expect(await tx);
-    });
+  it('Should Revert claiming a gift: blessing: false', async function () {
+    const tx = claimGiftTx(addr1, '8');
+    await expect(tx).to.be.revertedWith('Restriction check hasBlessingStatus failed');
+  });
 
-    it('Should Revert claiming a #11 - blessing: false', async function () {
-      const tx = claimGiftTx(addr1, '11');
-      await expect(tx).to.be.revertedWith('Restriction check hasBlessingStatus failed');
-    });
-
-    it('Should Activate Atia Shrine', async function () {
-      await mockAtia.connect(addr1).activateStreak();
-      expect(await mockAtia.hasCurrentlyActivated(addr1.address)).to.equal(true);
-    });
-    it('Should Claim #11', async function () {
-      const tx = claimGiftTx(addr1, '11');
-      expect(await tx);
-    });
+  it('Should Activate Blessing', async function () {
+    await mockAtia.connect(addr1).activateStreak();
+    expect(await mockAtia.hasCurrentlyActivated(addr1.address)).to.equal(true);
+  });
+  it('Should Claim a gift', async function () {
+    const tx = claimGiftTx(addr1, '8');
+    expect(await tx);
   });
 });

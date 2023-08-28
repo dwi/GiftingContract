@@ -20,7 +20,7 @@ const deploy = async ({ getNamedAccounts, deployments, network }: HardhatRuntime
 
   await deploy('Gifts', {
     from: deployer,
-    args: [restrictionController.address],
+    args: [WRON, restrictionController.address],
     log: true,
   });
 };

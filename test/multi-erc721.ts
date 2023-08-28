@@ -76,9 +76,29 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
       expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
     });
     it('Should generate a multi-gift', async function () {
-      const addr = [mockAxie.address, mockLand.address, mockAxie.address, mockLand.address];
-      const ids = [5001, 5101, 5002, 5102];
-      const tx = await giftContract.createGift(addr, ids, verifier.address);
+      const gift = [
+        {
+          assetContract: mockAxie.address,
+          tokenId: 5001,
+          amount: 0,
+        },
+        {
+          assetContract: mockLand.address,
+          tokenId: 5101,
+          amount: 0,
+        },
+        {
+          assetContract: mockAxie.address,
+          tokenId: 5002,
+          amount: 0,
+        },
+        {
+          assetContract: mockLand.address,
+          tokenId: 5102,
+          amount: 0,
+        },
+      ];
+      const tx = await giftContract.createGift(gift, verifier.address);
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockAxie.ownerOf(5001)).to.equal(giftContract.address);
@@ -97,12 +117,34 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
       const { verifier, code } = getVerifierAndCode('multi-asset2');
       await mockAxie.connect(addr1).setApprovalForAll(giftContract.address, false);
       expect(await mockAxie.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
-      const addr = [mockAxie.address, mockLand.address, mockAxie.address, mockLand.address];
-      const ids = [5001, 5101, 5002, 5102];
-      expect(giftContract.connect(addr1).createGift(addr, ids, verifier.address)).to.be.reverted;
+      const gift = [
+        {
+          assetContract: mockAxie.address,
+          tokenId: 5001,
+          amount: 0,
+        },
+        {
+          assetContract: mockLand.address,
+          tokenId: 5101,
+          amount: 0,
+        },
+        {
+          assetContract: mockAxie.address,
+          tokenId: 5002,
+          amount: 0,
+        },
+        {
+          assetContract: mockLand.address,
+          tokenId: 5102,
+          amount: 0,
+        },
+      ];
+      expect(giftContract.connect(addr1).createGift(gift, verifier.address)).to.be.reverted;
       await mockLand.connect(addr1).setApprovalForAll(giftContract.address, false);
       expect(await mockLand.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
-      expect(giftContract.connect(addr1).createGift(addr, ids, verifier.address)).to.be.reverted;
+      expect(giftContract.connect(addr1).createGift(gift, verifier.address)).to.be.revertedWith(
+        'ERC721: caller is not token owner or approved',
+      );
     });
     describe('Events', function () {
       it('Should emit matching GiftClaimed event', async function () {

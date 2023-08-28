@@ -6,6 +6,10 @@ export async function deployContracts() {
   await mockAtia.waitForDeployment();
   mockAtia.address = await mockAtia.getAddress();
 
+  // Mock WRON
+  const mockWRON = await (await ethers.getContractFactory('MockWRON')).deploy();
+  await mockWRON.waitForDeployment();
+  mockWRON.address = await mockWRON.getAddress();
   // Restriction Control
   const restrictionControl = await (
     await ethers.getContractFactory('RestrictionControl')
@@ -14,7 +18,9 @@ export async function deployContracts() {
   restrictionControl.address = await restrictionControl.getAddress();
 
   // Gift Contract
-  const giftContract = await (await ethers.getContractFactory('Gifts')).deploy(restrictionControl.address);
+  const giftContract = await (
+    await ethers.getContractFactory('Gifts')
+  ).deploy(mockWRON.address, restrictionControl.address);
   await giftContract.waitForDeployment();
   giftContract.address = await giftContract.getAddress();
 
@@ -42,5 +48,16 @@ export async function deployContracts() {
   await mock1155.waitForDeployment();
   mock1155.address = await mock1155.getAddress();
 
-  return { mockAtia, mockAxie, mockLand, mockWETH, mockUSDC, mockAXS, giftContract, restrictionControl, mock1155 };
+  return {
+    mockAtia,
+    mockWRON,
+    mockAxie,
+    mockLand,
+    mockWETH,
+    mockUSDC,
+    mockAXS,
+    giftContract,
+    restrictionControl,
+    mock1155,
+  };
 }

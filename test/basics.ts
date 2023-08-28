@@ -43,46 +43,61 @@ describe('Gifts: Basics', async function () {
     expect(await giftContract.version()).to.equal(3);
   });
 
-  it('Should mint Mock Tokens', async () => {
-    await mockAxie.safeTransferFrom(owner.address, addr1.address, 6);
-    await mockLand.batchMint(100, 5);
-    await mockLand.connect(addr1).mint(1000);
-    await mockLand.connect(addr1).mint(1001);
-    await mockAxie.connect(addr2).mint(2000);
-    await mockAxie.connect(addr2).mint(2001);
-    await mockWETH.connect(addr1).mint(100000000000000);
-    expect(await mockAxie.balanceOf(owner.address)).to.equal(97);
-    expect(await mockLand.balanceOf(owner.address)).to.equal(104);
-    expect(await mockLand.balanceOf(addr1.address)).to.equal(2);
-    expect(await mockWETH.balanceOf(addr1.address)).to.equal(100000000000000);
-  });
-
   describe('Create a gift', function () {
     const verifier1 = getVerifierAndCode('gift 1').verifier.address;
-    const verifier2 = ethers.Wallet.createRandom().address;
+    const verifier2 = getVerifierAndCode('gift 2').verifier.address;
     it('Approve NFT Collections', async function () {
       await mockAxie.setApprovalForAll(giftContract.address, true);
-      await mockLand.connect(addr1).setApprovalForAll(giftContract.address, true);
+      await mockLand.setApprovalForAll(giftContract.address, true);
       expect(await mockAxie.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
-      expect(await mockLand.isApprovedForAll(addr1.address, giftContract.address)).to.equal(true);
-      expect(await mockAxie.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
+      expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
     });
     it('Should create gifts', async function () {
-      await giftContract.createGift([mockAxie.address], [1], verifier1);
-      await giftContract.createGift([mockAxie.address], [2], verifier2);
-      expect(await mockAxie.balanceOf(owner.address)).to.equal(95);
-      expect(await mockAxie.balanceOf(giftContract.address)).to.equal(2);
+      const gift1 = [
+        {
+          assetContract: mockAxie.address,
+          tokenId: 1,
+          amount: 1,
+        },
+      ];
+      const gift2 = [
+        {
+          assetContract: mockAxie.address,
+          tokenId: 2,
+          amount: 1,
+        },
+      ];
+      await giftContract.createGift(gift1, verifier1);
+      await giftContract.createGift(gift2, verifier2);
+      expect(await mockAxie.ownerOf(1)).to.equal(giftContract.address);
+      expect(await mockAxie.ownerOf(2)).to.equal(giftContract.address);
       expect((await giftContract.getGift(verifier1)).claimed).to.equal(false);
-      expect((await giftContract.getGift(verifier1)).claimed).to.equal(false);
+      expect((await giftContract.getGift(verifier2)).claimed).to.equal(false);
     });
     describe('Events', function () {
       it('Should emit matching GiftCreated', async function () {
-        const addr = [mockLand.address, mockLand.address];
-        const axies = [1000, 1001];
-        const tx = await giftContract.connect(addr1).createGift(addr, axies, mockVerifier.address);
+        await mockLand.connect(addr1).mint(1000);
+        await mockAxie.connect(addr1).mint(2000);
+        await mockAxie.connect(addr1).setApprovalForAll(giftContract.address, true);
+        await mockLand.connect(addr1).setApprovalForAll(giftContract.address, true);
+        expect(await mockAxie.isApprovedForAll(addr1.address, giftContract.address)).to.equal(true);
+        expect(await mockLand.isApprovedForAll(addr1.address, giftContract.address)).to.equal(true);
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 2000,
+            amount: 1,
+          },
+          {
+            assetContract: mockLand.address,
+            tokenId: 1000,
+            amount: 1,
+          },
+        ];
+        const tx = await giftContract.connect(addr1).createGift(gift, mockVerifier.address);
         const blockBefore = await ethers.provider.getBlock(tx.blockNumber);
         const timestampBefore = blockBefore?.timestamp;
-        await expect(tx).to.emit(giftContract, 'GiftCreated').withArgs(3, addr1.address, addr, axies, timestampBefore);
+        await expect(tx).to.emit(giftContract, 'GiftCreated').withArgs(3, addr1.address, timestampBefore);
       });
     });
     describe('Reading data', function () {
@@ -98,33 +113,75 @@ describe('Gifts: Basics', async function () {
 
     describe('Test reverts', function () {
       it('Should revert createGift when re-using used verifier', async function () {
-        await expect(
-          giftContract.connect(owner).createGift([mockAxie.address], [3], mockVerifier.address),
-        ).to.be.revertedWith('NFTGifts: Sharing code already used');
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 3,
+            amount: 1,
+          },
+        ];
+        await expect(giftContract.connect(owner).createGift(gift, mockVerifier.address)).to.be.revertedWith(
+          'NFTGifts: Sharing code already used',
+        );
       });
       it('Should revert createGift when using invalid ERC721/ERC20 address', async function () {
-        await expect(giftContract.connect(owner).createGift([addr2.address], [3], ethers.Wallet.createRandom().address))
-          .to.be.reverted;
+        const gift = [
+          {
+            assetContract: addr2.address,
+            tokenId: 3,
+            amount: 1,
+          },
+        ];
+        await expect(giftContract.connect(owner).createGift(gift, ethers.Wallet.createRandom().address)).to.be.reverted;
       });
       it('Should revert when gifting owned token ID but gift contract is not approved', async function () {
+        await mockAxie.connect(addr2).mint(2001);
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 2001,
+            amount: 1,
+          },
+        ];
         await expect(
-          giftContract.connect(addr2).createGift([mockAxie.address], [2000], ethers.Wallet.createRandom().address),
+          giftContract.connect(addr2).createGift(gift, ethers.Wallet.createRandom().address),
         ).to.be.revertedWith('ERC721: caller is not token owner or approved');
       });
       it('Should revert when gifting not owned token ID', async function () {
-        await expect(
-          giftContract.createGift([mockAxie.address], [6], ethers.Wallet.createRandom().address),
-        ).to.be.revertedWith('ERC721: caller is not token owner or approved');
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 2001,
+            amount: 1,
+          },
+        ];
+        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
+          'ERC721: caller is not token owner or approved',
+        );
       });
       it('Should revert when gifting not owned token ID placed on unapproved smart contract', async function () {
-        await expect(
-          giftContract.createGift([mockAxie.address], [1], ethers.Wallet.createRandom().address),
-        ).to.be.revertedWith('ERC721: transfer from incorrect owner');
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 1,
+            amount: 1,
+          },
+        ];
+        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
+          'ERC721: transfer from incorrect owner',
+        );
       });
       it('Should revert when gifting invalid token ID', async function () {
-        await expect(
-          giftContract.createGift([mockAxie.address], [999999], ethers.Wallet.createRandom().address),
-        ).to.be.revertedWith('ERC721: invalid token ID');
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 999999,
+            amount: 1,
+          },
+        ];
+        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
+          'ERC721: invalid token ID',
+        );
       });
     });
   });
@@ -135,7 +192,14 @@ describe('Gifts: Basics', async function () {
       let giftID: any;
       let tx: any;
       it('Should generate a gift', async function () {
-        const tx = await giftContract.connect(owner).createGift([mockAxie.address], [5], verifier.address);
+        const gift = [
+          {
+            assetContract: mockAxie.address,
+            tokenId: 5,
+            amount: 1,
+          },
+        ];
+        const tx = await giftContract.connect(owner).createGift(gift, verifier.address);
         const res = await tx.wait();
         giftID = getGiftIDfromTx(giftContract, res);
 
@@ -161,32 +225,49 @@ describe('Gifts: Basics', async function () {
       const { verifier, code } = getVerifierAndCode('share code 999');
       var giftID: any;
       var tx: any;
-      var axies = [100, 101, 102, 103];
       it('Should approve collection 2', async function () {
         await mockLand.setApprovalForAll(giftContract.address, true);
         expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
       });
       it('Should generate a gift', async function () {
-        const tx = await giftContract.createGift(
-          [mockLand.address, mockLand.address, mockLand.address, mockLand.address],
-          axies,
-          verifier.address,
-        );
+        const gift = [
+          {
+            assetContract: mockLand.address,
+            tokenId: 10,
+            amount: 1,
+          },
+          {
+            assetContract: mockLand.address,
+            tokenId: 11,
+            amount: 1,
+          },
+          {
+            assetContract: mockLand.address,
+            tokenId: 12,
+            amount: 1,
+          },
+          {
+            assetContract: mockLand.address,
+            tokenId: 13,
+            amount: 1,
+          },
+        ];
+        const tx = await giftContract.createGift(gift, verifier.address);
         const res = await tx.wait();
         giftID = getGiftIDfromTx(giftContract, res);
 
         expect((await giftContract.getGift(verifier.address)).claimed).to.equal(false);
         expect((await giftContract.getGift(verifier.address)).giftID).to.equal(giftID);
-        expect(await mockLand.ownerOf(axies[0])).to.equal(giftContract.address);
+        expect(await mockLand.ownerOf(10)).to.equal(giftContract.address);
       });
       it('Should claim a gift', async function () {
         const signature = await signData(code, giftID, addr2.address as Address);
         tx = await giftContract.connect(operator).claimGift(giftID, addr2.address, signature);
         expect((await giftContract.getGift(verifier.address)).claimed).to.equal(true);
-        expect(await mockLand.ownerOf(axies[0])).to.equal(addr2.address);
+        expect(await mockLand.ownerOf(10)).to.equal(addr2.address);
       });
       it("Token ID should be on original signer's address", async function () {
-        expect(await mockLand.ownerOf(axies[0])).to.equal(addr2.address);
+        expect(await mockLand.ownerOf(10)).to.equal(addr2.address);
       });
       it('Operator should not have any new tokens', async function () {
         expect(await mockLand.balanceOf(operator.address)).to.equal(0);
