@@ -12,8 +12,14 @@ const deploy = async ({ getNamedAccounts, deployments, network }: HardhatRuntime
     args: [],
     log: true,
   });
+
+  await deploy('MockWRON', {
+    from: deployer,
+    args: [],
+    log: true,
+  });
 };
 
-deploy.tags = ['MockAtiaShrine'];
+deploy.tags = ['MockContracts'];
 
 export default deploy;
