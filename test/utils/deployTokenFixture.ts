@@ -36,5 +36,11 @@ export async function deployContracts() {
   mockWETH.address = await mockWETH.getAddress();
   mockUSDC.address = await mockUSDC.getAddress();
   mockAXS.address = await mockAXS.getAddress();
-  return { mockAtia, mockAxie, mockLand, mockWETH, mockUSDC, mockAXS, giftContract, restrictionControl };
+
+  // ERC1155
+  const mock1155 = await (await ethers.getContractFactory('MockERC1155')).deploy('MOCK1155');
+  await mock1155.waitForDeployment();
+  mock1155.address = await mock1155.getAddress();
+
+  return { mockAtia, mockAxie, mockLand, mockWETH, mockUSDC, mockAXS, giftContract, restrictionControl, mock1155 };
 }
