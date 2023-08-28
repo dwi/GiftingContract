@@ -46,7 +46,7 @@ library CurrencyTransferLib {
         safeTransferNativeTokenWithWrapper(_to, _amount, _nativeTokenWrapper);
       } else if (_to == address(this)) {
         // store native currency in wron
-        require(_amount == msg.value, "msg.value != amount");
+        require(_amount <= msg.value, "msg.value < amount");
         IWRON(_nativeTokenWrapper).deposit{value: _amount}();
       } else {
         safeTransferNativeTokenWithWrapper(_to, _amount, _nativeTokenWrapper);

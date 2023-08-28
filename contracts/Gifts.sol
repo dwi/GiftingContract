@@ -184,9 +184,26 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
       "NFTGifts: Arrays must be of the same length"
     );
 
+    // remaining balance after creating gifts - handle refunds
+    uint256 _remainingBalance = msg.value;
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
     for (uint256 _i = 0; _i < arrayLength; _i++) {
       createGift(_tokensArray[_i], _restrictions[_i], _verifier[_i]);
+
+      // Loop through tokens and subtract native token amounts from remaining balance
+      // Maybe there is a better gas-efficient way to do this?
+      uint256 _tokensLength = _tokensArray[_i].length;
+      for (uint256 _j = 0; _j < _tokensLength; _j++) {
+        if (_tokensArray[_i][_j].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
+          _remainingBalance -= _tokensArray[_i][_j].amount;
+        }
+      }
+    }
+
+    // if there is RON balance remaining, refund the rest
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY
+    if (_remainingBalance > 0) {
+      payable(msg.sender).transfer(_remainingBalance);
     }
   }
 

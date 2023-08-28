@@ -68,7 +68,7 @@ describe('Gifts: RON/WRON Support', async function () {
       );
       expect(tx).to.be.reverted;
     });
-    it('Should revert when value is not matching amount in gifts', async function () {
+    it('Should revert when value is less than gift amount(s)', async function () {
       const gift = [
         {
           assetContract: NATIVE_TOKEN_ADDRESS,
@@ -85,10 +85,10 @@ describe('Gifts: RON/WRON Support', async function () {
         gift,
         ethers.Wallet.createRandom().address,
         {
-          value: 201,
+          value: 199,
         },
       );
-      await expect(tx).to.be.revertedWith('msg.value != amount');
+      await expect(tx).to.be.revertedWith('msg.value < amount');
     });
     it('Should claim a gift', async function () {
       const startRon = await ethers.provider.getBalance(addr1.address);
@@ -118,6 +118,7 @@ describe('Gifts: RON/WRON Support', async function () {
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWRON.balanceOf(giftContract.address)).to.equal(tx.value);
     });
+
     describe('Events', function () {
       it('Should emit matching GiftClaimed event', async function () {
         expect(tx).to.emit(giftContract, 'GiftClaimed').withArgs(giftID, addr1.address);

@@ -5,7 +5,7 @@ import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers';
 import { Address } from 'viem';
 import { getVerifierAndCode, signData } from './utils/cryptography';
 import { deployContracts } from './utils/deployTokenFixture';
-import { getGiftIDfromTx } from './utils/helpers';
+import { NATIVE_TOKEN_ADDRESS, getGiftIDfromTx } from './utils/helpers';
 
 let owner: HardhatEthersSigner,
   addr1: HardhatEthersSigner,
@@ -18,9 +18,10 @@ let owner: HardhatEthersSigner,
   mockUSDC: any,
   mockAXS: any,
   mockAtia: any,
-  mock1155: any;
+  mock1155: any,
+  mockWRON: any;
 
-describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function () {
+describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async function () {
   beforeEach(async () => {
     [owner, addr1, addr2, operator] = await ethers.getSigners();
   });
@@ -34,6 +35,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
     mockAXS = x.mockAXS;
     giftContract = x.giftContract;
     mock1155 = x.mock1155;
+    mockWRON = x.mockWRON;
 
     expect(await mockAtia.hasCurrentlyActivated(owner.address)).to.equal(false);
     expect(await mockAxie.name()).to.equal('Axie');
@@ -174,7 +176,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       });
     });
   });
-  describe('Create a Combined ERC20/ERC721/ERC1155 Gift', async function () {
+  describe('Create a Combined ERC20/ERC721/ERC1155 and RON Gift', async function () {
     const { verifier, code } = getVerifierAndCode('combined erc 20/721/1155 gifts');
     var giftID: any;
     var tx: any;
@@ -221,8 +223,15 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
           tokenId: 2,
           amount: 20,
         },
+        {
+          assetContract: NATIVE_TOKEN_ADDRESS,
+          tokenId: 0,
+          amount: BigInt(2 * 10e17),
+        },
       ];
-      const tx = await giftContract.createGift(gift, verifier.address);
+      const tx = await giftContract['createGift((address,uint256,uint256)[],address)'](gift, verifier.address, {
+        value: BigInt(2 * 10e17),
+      });
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(123123);
@@ -236,8 +245,10 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       expect(await mock1155.balanceOf(owner.address, 2)).to.equal(180);
       expect((await giftContract.getGift(verifier.address)).claimed).to.equal(false);
       expect((await giftContract.getGift(verifier.address)).giftID).to.equal(giftID);
+      expect(await mockWRON.balanceOf(giftContract.address)).to.equal(tx.value);
     });
     it('Should claim an ERC20 gift', async function () {
+      const startRon = await ethers.provider.getBalance(addr1.address);
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
       expect(giftContract.getGift(verifier.address)).to.be.revertedWith('NFTGifts: Invalid gift');
@@ -250,6 +261,8 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       expect(await mock1155.balanceOf(addr1.address, 2)).to.equal(20);
       expect(await mock1155.balanceOf(giftContract.address, 1)).to.equal(0);
       expect(await mock1155.balanceOf(giftContract.address, 2)).to.equal(0);
+      expect(await mockWRON.balanceOf(giftContract.address)).to.equal(0);
+      expect(await ethers.provider.getBalance(addr1.address)).above(startRon);
     });
     it('Should revert when ERC20 has low/no allowance', async () => {
       await mockWETH.approve(giftContract.address, 0);
@@ -324,6 +337,11 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
             assetContract: mockWETH.address,
             tokenId: 0,
             amount: 10,
+          },
+          {
+            assetContract: NATIVE_TOKEN_ADDRESS,
+            tokenId: 0,
+            amount: BigInt(5 * 10e17),
           },
         ],
         [
@@ -439,6 +457,11 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
             amount: 100,
           },
           {
+            assetContract: NATIVE_TOKEN_ADDRESS,
+            tokenId: 0,
+            amount: BigInt(2 * 10e17),
+          },
+          {
             assetContract: mock1155.address,
             tokenId: 1,
             amount: 20,
@@ -451,10 +474,10 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
         ],
       ];
 
-      expect(await giftContract.createGifts(gift, Array(gift.length).fill([]), verifiers)).to.emit(
-        giftContract,
-        'GiftCreated',
-      );
+      expect(
+        await giftContract.createGifts(gift, Array(gift.length).fill([]), verifiers, { value: BigInt(20 * 10e17) }),
+      ).to.emit(giftContract, 'GiftCreated');
+
       expect((await giftContract.getGift(verifiers[0])).claimed).to.equal(false);
       expect((await giftContract.getGift(verifiers[1])).claimed).to.equal(false);
       expect((await giftContract.getGift(verifiers[2])).claimed).to.equal(false);
@@ -462,10 +485,14 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       expect((await giftContract.getGift(verifiers[4])).claimed).to.equal(false);
       expect(await mockAxie.ownerOf(10000)).to.equal(giftContract.address);
       expect(await mockLand.ownerOf(20003)).to.equal(giftContract.address);
+      expect(await ethers.provider.getBalance(giftContract.address)).to.equal(0);
+      expect(await mockWRON.balanceOf(giftContract.address)).to.equal(BigInt(7 * 10e17));
     });
 
     it('Should claim an multi gift', async function () {
       const claimer = (await ethers.getSigners())[10];
+
+      const startRon = await ethers.provider.getBalance(claimer.address);
       const verifier = getVerifierAndCode('multigift5').verifier.address;
       const giftID = (await giftContract.getGift(verifier)).giftID;
       const signature = await signData(getVerifierAndCode('multigift5').code, giftID, claimer.address as Address);
@@ -488,6 +515,8 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       expect(await mockLand.ownerOf(20003)).to.equal(claimer.address);
       expect(await mock1155.balanceOf(claimer.address, 1)).to.equal(20);
       expect(await mock1155.balanceOf(claimer.address, 2)).to.equal(30);
+      expect(await ethers.provider.getBalance(claimer.address)).above(startRon);
+      expect(await mockWRON.balanceOf(giftContract.address)).to.equal(BigInt(5 * 10e17)); // 5 ron remaining in unclaimed gift
     });
   });
 
@@ -522,6 +551,8 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155)', async function (
       expect(await mockAXS.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockAxie.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockLand.balanceOf(giftContract.address)).to.equal(0);
+      expect(await mockWRON.balanceOf(giftContract.address)).to.equal(0);
+      expect(await ethers.provider.getBalance(giftContract.address)).to.equal(0);
     });
   });
 });
