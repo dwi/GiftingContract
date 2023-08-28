@@ -83,7 +83,7 @@ describe('Gifts: Test restriction controller upgrade', async function () {
     await mockAxie.setApprovalForAll(giftContract.address, true);
     expect(await mockAxie.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
   });
-  it('Create a random gift with existing restriction', async function () {
+  it('Create a random gift with existing hasBlessingStreak restriction', async function () {
     const restrictions = [
       {
         id: 'hasBlessingStreak',
@@ -91,6 +91,10 @@ describe('Gifts: Test restriction controller upgrade', async function () {
       },
     ];
     const tx = createRandomSingleERC721Gift(owner, '1', restrictions);
+    expect(tx);
+  });
+  it('Should Claim: Blessing Streak ✅', async function () {
+    const tx = claimGiftTx(addr1, '1');
     expect(tx);
   });
   it('Create gift - Should revert: Invalid Restriction', async function () {

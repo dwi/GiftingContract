@@ -62,6 +62,10 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     restrictionController = IRestrictionControl(_restrictionController);
   }
 
+  receive() external payable virtual {
+    require(msg.sender == nativeTokenWrapper, "caller not native token wrapper.");
+  }
+
   /**
    * @dev Set the access control contract address
    * @param _restrictionController The address of the access control contract
@@ -108,7 +112,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @param _verifier Address of a verifier
    *
    */
-  function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public {
+  function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public payable {
     require(_verifier != address(0), "NFTGifts: Invalid verifier address");
     require(allVerifiers[_verifier] == 0, "NFTGifts: Sharing code already used");
     uint _tokensLength = _tokens.length;
@@ -119,7 +123,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Transfer NFTs/ERC20 tokens to smart contract
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
-    // TODO: ADD (W)RON support with automated (un)wrapping
     for (uint256 _i = 0; _i < _tokensLength; _i++) {
       allGifts[giftID].tokens.push(_tokens[_i]);
     }
@@ -155,7 +158,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @param _verifier Address of a verifier
    *
    */
-  function createGift(Token[] calldata _tokens, address _verifier) public {
+  function createGift(Token[] calldata _tokens, address _verifier) public payable {
     createGift(_tokens, new Restriction[](0), _verifier);
   }
 
@@ -174,7 +177,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     Token[][] calldata _tokensArray,
     Restriction[][] memory _restrictions,
     address[] calldata _verifier
-  ) external {
+  ) external payable {
     uint arrayLength = _tokensArray.length;
     require(
       _tokensArray.length == arrayLength && _verifier.length == arrayLength,
@@ -317,7 +320,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
   /// @dev Transfers an arbitrary ERC20 / ERC721 / ERC1155 token.
   function _transferToken(address _from, address _to, Token memory _token) internal {
-    if (_token.assetContract.isERC20()) {
+    if (_token.assetContract == CurrencyTransferLib.NATIVE_TOKEN || _token.assetContract.isERC20()) {
       CurrencyTransferLib.transferCurrencyWithWrapper(
         _token.assetContract,
         _from,
