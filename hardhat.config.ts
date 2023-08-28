@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
+const DEFAULT_MNEMONIC = 'test test test test test test test test test test test junk';
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -23,12 +24,12 @@ const config: HardhatUserConfig = {
     ronin: {
       chainId: 2020,
       url: 'https://api.roninchain.com/rpc',
-      accounts: [PRIVATE_KEY!],
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : { mnemonic: DEFAULT_MNEMONIC },
     },
     saigon: {
       chainId: 2021,
       url: 'https://saigon-testnet.roninchain.com/rpc',
-      accounts: [PRIVATE_KEY!],
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : { mnemonic: DEFAULT_MNEMONIC },
     },
   },
   gasReporter: {
