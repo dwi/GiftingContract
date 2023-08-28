@@ -5,7 +5,9 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "./Interfaces/IRestrictionControl.sol";
 import "./InterfaceChecker.sol";
 import "hardhat/console.sol";
 
@@ -13,23 +15,26 @@ import "hardhat/console.sol";
  * @title NFT Gifts Smart Contract
  * @author dw
  *
- * @dev Allows trustlessly give ERC721 gifts to not yet known recepients.
+ * @dev Allows trustlessly give ERC721/ERC20 gifts to not yet known recepients.
  *
  */
-contract NFTGifts_v3 is ERC721Holder {
+contract Gifts is ERC721Holder, Ownable {
   using InterfaceChecker for address;
+
+  struct Restriction {
+    string id;
+    bytes args;
+  }
 
   struct Gift {
     uint256 giftID;
-    address[] tokenAddresses; // Address of the ERC721 contract
-    uint256[] tokenIDsOrAmounts; // Array of NFT token IDs that are part of this Gift
+    address[] tokenAddresses; // Address of the ERC721/ERC20 contract
+    uint256[] tokenIDsOrAmounts; // Array of NFT token IDs or ERC20 amounts that are part of this Gift
     bool claimed; // Flag to track if the Gift has been claimed
     bool cancelled; // Flag to track if the Gift has been cancelled
     address creator; // Address of the Gift creator
     uint createdAt; // Timestamp of when the Gift was created
-  }
-  struct Verifier {
-    bool empty;
+    Restriction[] restrictions;
   }
 
   mapping(uint256 => Gift) private allGifts; // Mapping from giftID to gift information
@@ -37,6 +42,28 @@ contract NFTGifts_v3 is ERC721Holder {
   mapping(address => uint256) private allVerifiers; // Mapping from verifier address to giftID
 
   uint256 private giftCounter;
+  IRestrictionControl private restrictionController;
+
+  /**
+   * @dev Constructor function
+   * @param _restrictionController The address of the access control contract
+   */
+  constructor(address _restrictionController) {
+    restrictionController = IRestrictionControl(_restrictionController);
+  }
+
+  /**
+   * @dev Set the access control contract address
+   * @param _restrictionController The address of the access control contract
+   * @notice Need to make sure the restriction controller is correct
+   */
+  function updateController(address _restrictionController) external onlyOwner {
+    require(_restrictionController.code.length > 0, "Invalid contract address");
+    require(_restrictionController.isRestrictionControl(), "Invalid interface");
+    require(_restrictionController != address(0), "Zero address");
+    restrictionController = IRestrictionControl(_restrictionController);
+    emit ControllerUpdated(_restrictionController);
+  }
 
   receive() external payable {}
 
@@ -62,6 +89,11 @@ contract NFTGifts_v3 is ERC721Holder {
   event GiftCancelled(uint256 indexed _giftID);
 
   /**
+   * @dev Event emitted when restriction controller is updated
+   */
+  event ControllerUpdated(address _restrictionController);
+
+  /**
    * @dev Create a new gift
    *
    * Requirements:
@@ -77,6 +109,7 @@ contract NFTGifts_v3 is ERC721Holder {
   function createGift(
     address[] calldata _tokenAddresses,
     uint256[] calldata _tokenIDsOrAmounts,
+    Restriction[] memory _restrictions,
     address _verifier
   ) public {
     require(_verifier != address(0), "NFTGifts: Invalid verifier address");
@@ -86,6 +119,8 @@ contract NFTGifts_v3 is ERC721Holder {
     require(_tokenAddressesLength == _tokenIDsOrAmountsLength, "NFTGifts: Arrays must be of the same length");
 
     // Transfer NFTs/ERC20 tokens to smart contract
+    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
+    // TODO: ADD (W)RON support with automated (un)wrapping
     for (uint256 _i = 0; _i < _tokenAddressesLength; _i++) {
       address tokenAddress = _tokenAddresses[_i];
       uint256 tokenIDsOrAmounts = _tokenIDsOrAmounts[_i];
@@ -107,9 +142,38 @@ contract NFTGifts_v3 is ERC721Holder {
     allGifts[giftID].tokenIDsOrAmounts = _tokenIDsOrAmounts;
     allGifts[giftID].createdAt = block.timestamp;
     allGifts[giftID].giftID = giftID;
+
+    // Attach restriction rules to the gift
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY
+    uint _restrictionsLength = _restrictions.length;
+    if (_restrictionsLength > 0) {
+      require(_restrictionsLength <= 10, "NFTGifts: Too many restrictions");
+      for (uint i = 0; i < _restrictionsLength; i++) {
+        require(restrictionController.isValidRestriction(_restrictions[i].id), "Invalid Restriction");
+        // Couldn't figure out a way how to pass _restrictions directly to allGifts[giftID].restrictions
+        allGifts[giftID].restrictions.push(_restrictions[i]);
+      }
+    }
+
     allVerifiers[_verifier] = giftID;
 
     emit GiftCreated(giftID, msg.sender, _tokenAddresses, _tokenIDsOrAmounts, block.timestamp);
+  }
+
+  /**
+   * @dev Create a new gift with no restrictions
+   *
+   * @param _tokenAddresses Addresses of ERC721/ERC20 Tokens
+   * @param _tokenIDsOrAmounts An array of token IDs or ERC20 amounts
+   * @param _verifier Address of a verifier
+   *
+   */
+  function createGift(
+    address[] calldata _tokenAddresses,
+    uint256[] calldata _tokenIDsOrAmounts,
+    address _verifier
+  ) public {
+    createGift(_tokenAddresses, _tokenIDsOrAmounts, new Restriction[](0), _verifier);
   }
 
   /**
@@ -118,14 +182,16 @@ contract NFTGifts_v3 is ERC721Holder {
    * Requirements:
    * - Array sizes has to match
    *
-   * @param _tokenAddresses Array of ERC721 Token addresses
-   * @param _tokenIDsOrAmounts Array of arrays of token IDs
+   * @param _tokenAddresses Array of ERC721/ERC20 Token addresses
+   * @param _tokenIDsOrAmounts Array of arrays of token IDs or ERC20 amounts
    * @param _verifier Address of a verifier
    *
    */
   function createGifts(
+    // always has to have restrictions, even empty
     address[][] calldata _tokenAddresses,
     uint256[][] calldata _tokenIDsOrAmounts,
+    Restriction[][] memory _restrictions,
     address[] calldata _verifier
   ) external {
     uint arrayLength = _tokenAddresses.length;
@@ -133,47 +199,12 @@ contract NFTGifts_v3 is ERC721Holder {
       _tokenIDsOrAmounts.length == arrayLength && _verifier.length == arrayLength,
       "NFTGifts: Arrays must be of the same length"
     );
+
+    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
     for (uint256 _i = 0; _i < arrayLength; _i++) {
-      createGift(_tokenAddresses[_i], _tokenIDsOrAmounts[_i], _verifier[_i]);
+      createGift(_tokenAddresses[_i], _tokenIDsOrAmounts[_i], _restrictions[_i], _verifier[_i]);
     }
   }
-
-  /**
-   * @dev Retrieves the information of a gift.
-   *
-   * @param _giftID ID of a gift
-   * @return currentGift The information of the gift
-   *
-   */
-  // NOT NEEDED
-  // function getGiftByID(uint256 _giftID) external view returns (Gift memory currentGift) {
-  //   // Retrieve the current gift from the mapping.
-  //   currentGift = allGifts[_giftID];
-
-  //   // Check if the gift exists and has not been cancelled.
-  //   require(currentGift.creator != address(0), "NFTGifts: Invalid gift");
-  // }
-
-  /**
-   * @dev Retrieves the gift ID by using verifier address
-   *
-   * @param _verifier Verifier address
-   * @return giftID
-   *
-   */
-  // NOT NEEDED
-  // function getGift(address _verifier) external view returns (uint256 giftID) {
-  //   // Retrieve the current gift from the mapping.
-  //   giftID = allVerifiers[_verifier];
-
-  //   // Check if the gift exists and has not been cancelled.
-  //   require(
-  //     allGifts[giftID].creator != address(0) &&
-  //       allGifts[giftID].cancelled == false &&
-  //       allGifts[giftID].claimed == false,
-  //     "NFTGifts: Invalid gift"
-  //   );
-  // }
 
   /**
    * @dev Retrieves the gift by using verifier address
@@ -188,6 +219,7 @@ contract NFTGifts_v3 is ERC721Holder {
     currentGift = allGifts[giftID];
 
     // Check if the gift exists and has not been cancelled.
+    // TODO: Concern #3 - Should return cancelled/claimed gifts or just return "Invalid gift"?
     require(allGifts[giftID].creator != address(0) && allGifts[giftID].cancelled == false, "NFTGifts: Invalid gift");
   }
 
@@ -213,6 +245,19 @@ contract NFTGifts_v3 is ERC721Holder {
     require(!currentGift.claimed, "NFTGifts: Gift has already been claimed");
     require(currentGift.creator != address(0), "NFTGifts: Invalid gift");
     require(currentGift.creator != _receiver, "NFTGifts: Cannot claim your own gift");
+
+    // Check for gift restrictions
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY
+    for (uint i = 0; i < currentGift.restrictions.length; i++) {
+      require(
+        restrictionController.checkRestriction(
+          _receiver,
+          currentGift.restrictions[i].id,
+          currentGift.restrictions[i].args
+        ),
+        string(abi.encodePacked("Restriction check ", currentGift.restrictions[i].id, " failed"))
+      );
+    }
 
     // Transfer NFTs to the recipient of the gift.
     uint256 arrayLength = currentGift.tokenIDsOrAmounts.length;
@@ -255,39 +300,6 @@ contract NFTGifts_v3 is ERC721Holder {
       mstore(GiftsTemp, count)
     }
   }
-
-  /**
-   * @dev Get all unclaimed gifts created by a given address
-   *
-   * @return ids Array of all unclaimed gifts
-   *
-   */
-  // NOT NEEDED
-  // function getUnclaimedGiftIDs() external view returns (uint256[] memory ids) {
-  //   //uint256 activeGiftCounter = getActiveGiftCount();
-  //   ids = new uint256[](giftCounter);
-
-  //   uint256 count;
-  //   for (uint256 _i = 1; _i <= giftCounter; _i++) {
-  //     if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
-  //       ids[count] = _i;
-  //       count++;
-  //     }
-  //   }
-  //   assembly {
-  //     mstore(ids, count)
-  //   }
-  // }
-
-  // function getActiveGiftCount() internal view returns (uint) {
-  //   uint count;
-  //   for (uint _i = 1; _i <= giftCounter; _i++) {
-  //     if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
-  //       count++;
-  //     }
-  //   }
-  //   return count;
-  // }
 
   /**
    * @dev Cancel a gift created by a caller
@@ -362,7 +374,8 @@ contract NFTGifts_v3 is ERC721Holder {
     signer = ECDSA.recover(ethSignedMessageHash, _signature);
   }
 
+  // TODO: Temp thing for tests
   function version() public pure returns (uint256) {
-    return 2;
+    return 3;
   }
 }

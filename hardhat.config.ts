@@ -1,9 +1,6 @@
+import 'dotenv/config';
 import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
-import '@openzeppelin/hardhat-upgrades';
-import 'hardhat-deploy';
-import 'dotenv/config';
-import 'solidity-coverage';
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
@@ -13,7 +10,7 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 10000,
+        runs: 200,
       },
     },
   },
@@ -35,18 +32,9 @@ const config: HardhatUserConfig = {
     },
   },
   gasReporter: {
-    excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721'],
+    excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721', 'MockAtiaShrine'],
     gasPrice: 20,
     enabled: true,
-  },
-  namedAccounts: {
-    deployer: {
-      default: 0,
-      1337: 0, //<-use chain id to tell which network the use the 0th account as deployer.
-    },
-    player: {
-      default: 1,
-    },
   },
 };
 

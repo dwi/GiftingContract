@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.18;
 
-import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
-import { IERC1155 } from "@openzeppelin/contracts/interfaces/IERC1155.sol";
-import { IERC721 } from "@openzeppelin/contracts/interfaces/IERC721.sol";
-import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IERC1155} from "@openzeppelin/contracts/interfaces/IERC1155.sol";
+import {IERC721} from "@openzeppelin/contracts/interfaces/IERC721.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import "./Interfaces/IRestrictionControl.sol";
 
 library InterfaceChecker {
+  function isRestrictionControl(address check) internal view returns (bool) {
+    try IERC165(check).supportsInterface(type(IRestrictionControl).interfaceId) returns (bool isController) {
+      return isController;
+    } catch {
+      return false;
+    }
+  }
+
   function isERC1155(address check) internal view returns (bool) {
     try IERC165(check).supportsInterface(type(IERC1155).interfaceId) returns (bool is1155) {
       return is1155;
