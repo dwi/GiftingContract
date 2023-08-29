@@ -95,9 +95,7 @@ describe('Gifts: Basics', async function () {
           },
         ];
         const tx = await giftContract.connect(addr1).createGift(gift, mockVerifier.address);
-        const blockBefore = await ethers.provider.getBlock(tx.blockNumber);
-        const timestampBefore = blockBefore?.timestamp;
-        await expect(tx).to.emit(giftContract, 'GiftCreated').withArgs(3, addr1.address, timestampBefore);
+        await expect(tx).to.emit(giftContract, 'GiftCreated').withArgs(3, addr1.address);
       });
     });
     describe('Reading data', function () {
@@ -121,7 +119,7 @@ describe('Gifts: Basics', async function () {
           },
         ];
         await expect(giftContract.connect(owner).createGift(gift, mockVerifier.address)).to.be.revertedWith(
-          'NFTGifts: Sharing code already used',
+          'Sharing code already used',
         );
       });
       it('Should revert createGift when using invalid ERC721/ERC20 address', async function () {
@@ -282,25 +280,25 @@ describe('Gifts: Basics', async function () {
       it('Should revert when claiming your own gift', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(3, addr1.address, signature)).to.be.revertedWith(
-          'NFTGifts: Cannot claim your own gift',
+          'Cannot claim your own gift',
         );
       });
       it('Should revert when claiming gift with wrong claimer', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(3, owner.address, signature)).to.be.revertedWith(
-          'NFTGifts: Invalid verifier',
+          'Invalid verifier',
         );
       });
       it('Should revert when claiming gift with different giftID', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWith(
-          'NFTGifts: Invalid verifier',
+          'Invalid verifier',
         );
       });
       it('Should revert when claiming already claimed gift', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWith(
-          'NFTGifts: Invalid verifier',
+          'Invalid verifier',
         );
       });
     });
@@ -311,9 +309,7 @@ describe('Gifts: Basics', async function () {
     it('Should cancel unclaimed gift', async function () {
       bal = Number(await mockAxie.balanceOf(owner.address));
       tx = await giftContract.cancelGifts([1]);
-      expect(giftContract.getGift(getVerifierAndCode('gift 1').verifier.address)).to.be.revertedWith(
-        'NFTGifts: Invalid gift',
-      );
+      expect(giftContract.getGift(getVerifierAndCode('gift 1').verifier.address)).to.be.revertedWith('Invalid gift');
     });
 
     it('Token IDs are returned back to gift creator', async function () {
@@ -327,21 +323,19 @@ describe('Gifts: Basics', async function () {
 
     describe('Test reverts', function () {
       it('Should revert because of invalid gift ID', async function () {
-        await expect(giftContract.cancelGifts([99999])).to.be.revertedWith('NFTGifts: Invalid gift');
+        await expect(giftContract.cancelGifts([99999])).to.be.revertedWith('Invalid gift');
       });
       it('Should revert because not owner of that gift', async function () {
-        await expect(giftContract.connect(addr1).cancelGifts([2])).to.be.revertedWith(
-          'NFTGifts: Only gift creator can cancel the gift',
-        );
+        await expect(giftContract.connect(addr1).cancelGifts([2])).to.be.revertedWith('Only gift creator can cancel');
       });
 
       it('Should revert because already claimed', async function () {
         await expect(giftContract.connect(addr1).cancelGifts([4])).to.be.revertedWith(
-          'NFTGifts: The gift has already been claimed',
+          'The gift has already been claimed',
         );
       });
       it('Should revert because gift already cancelled', async function () {
-        await expect(giftContract.cancelGifts([1])).to.be.revertedWith('NFTGifts: The gift has been already cancelled');
+        await expect(giftContract.cancelGifts([1])).to.be.revertedWith('The gift has been already cancelled');
       });
     });
   });

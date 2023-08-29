@@ -82,7 +82,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     it('Should claim an ERC20 gift', async function () {
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('NFTGifts: Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(0);
     });
     it('Should revert when ERC20 has low/no allowance', async () => {
@@ -142,7 +142,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     it('Should claim an ERC20 gift', async function () {
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('NFTGifts: Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockUSDC.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockAXS.balanceOf(giftContract.address)).to.equal(0);
@@ -251,7 +251,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       const startRon = await ethers.provider.getBalance(addr1.address);
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('NFTGifts: Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockUSDC.balanceOf(giftContract.address)).to.equal(0);
       expect(await mockAXS.balanceOf(giftContract.address)).to.equal(0);
@@ -507,7 +507,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
         .to.emit(giftContract, 'GiftClaimed')
         .withArgs(giftID, claimer.address);
 
-      expect(giftContract.getGift(verifier)).to.be.revertedWith('NFTGifts: Invalid gift');
+      expect(giftContract.getGift(verifier)).to.be.revertedWith('Invalid gift');
       expect(await mockWETH.balanceOf(claimer.address)).to.equal(42);
       expect(await mockUSDC.balanceOf(claimer.address)).to.equal(20);
       expect(await mockAXS.balanceOf(claimer.address)).to.equal(100);
@@ -534,16 +534,16 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       const giftIDs: any = [];
       gifts.map((gift: any) => giftIDs.push(gift.giftID));
       giftIDs.push(4);
-      //await expect(giftContract.connect(addr1).cancelGifts(giftIDs)).to.be.revertedWith('NFTGifts: Only gift creator can cancel the gift')
+      //await expect(giftContract.connect(addr1).cancelGifts(giftIDs)).to.be.revertedWith('Only gift creator can cancel the gift')
       await expect(giftContract.connect(addr1).cancelGifts(giftIDs)).to.be.revertedWith(
-        'NFTGifts: The gift has been already cancelled',
+        'The gift has been already cancelled',
       );
     });
     it('Nothing to cancel, revert', async function () {
       const gifts = await giftContract.connect(addr1).getUnclaimedGifts();
       const giftIDs: bigint[] = [];
       gifts.map((gift: any) => giftIDs.push(gift.giftID));
-      await expect(giftContract.connect(addr1).cancelGifts(giftIDs)).to.be.revertedWith('NFTGifts: No gifts to cancel');
+      await expect(giftContract.connect(addr1).cancelGifts(giftIDs)).to.be.revertedWith('No gifts to cancel');
     });
     it('Gifting contract balance should be 0', async function () {
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(0);

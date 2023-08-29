@@ -109,7 +109,7 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
     it('Should claim a gift', async function () {
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('NFTGifts: Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
       expect(await mockAxie.ownerOf(5001)).to.equal(addr1.address);
       expect(await mockLand.ownerOf(5101)).to.equal(addr1.address);
     });
