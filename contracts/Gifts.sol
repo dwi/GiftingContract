@@ -96,7 +96,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @dev Event emitted when a new gift is created
    * @notice Removed emitting of individual token contained in the gift
    */
-  event GiftCreated(uint256 indexed _giftID, address indexed _createdBy);
+  event GiftCreated(uint256 indexed _giftID, address _createdBy);
 
   /**
    * @dev Event emitted when a gift is claimed
@@ -137,8 +137,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Transfer NFTs/ERC20 tokens to smart contract
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
-    for (uint256 _i = 0; _i < _tokensLength; _i++) {
+    for (uint256 _i = 0; _i < _tokensLength; ) {
       allGifts[giftID].tokens.push(_tokens[_i]);
+      unchecked {
+        _i++;
+      }
     }
 
     // Save the gift information
@@ -151,10 +154,13 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     uint256 _restrictionsLength = _restrictions.length;
     if (_restrictionsLength > 0) {
       if (_restrictionsLength > MAX_RESTRICTIONS_PER_GIFT) revert TooManyRestrictions();
-      for (uint256 i = 0; i < _restrictionsLength; i++) {
-        if (!restrictionController.isValidRestriction(_restrictions[i].id)) revert InvalidRestriction();
+      for (uint256 _i = 0; _i < _restrictionsLength; ) {
+        if (!restrictionController.isValidRestriction(_restrictions[_i].id)) revert InvalidRestriction();
         // Couldn't figure out a way how to pass _restrictions directly to allGifts[giftID].restrictions
-        allGifts[giftID].restrictions.push(_restrictions[i]);
+        allGifts[giftID].restrictions.push(_restrictions[_i]);
+        unchecked {
+          _i++;
+        }
       }
     }
 
@@ -199,16 +205,22 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // remaining balance after creating gifts - handle refunds
     uint256 _remainingBalance = msg.value;
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
-    for (uint256 _i = 0; _i < arrayLength; _i++) {
+    for (uint256 _i = 0; _i < arrayLength; ) {
       createGift(_tokensArray[_i], _restrictions[_i], _verifier[_i]);
 
       // Loop through tokens and subtract native token amounts from remaining balance
       // Maybe there is a better gas-efficient way to do this?
       uint256 _tokensLength = _tokensArray[_i].length;
-      for (uint256 _j = 0; _j < _tokensLength; _j++) {
+      for (uint256 _j = 0; _j < _tokensLength; ) {
         if (_tokensArray[_i][_j].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
           _remainingBalance -= _tokensArray[_i][_j].amount;
         }
+        unchecked {
+          _j++;
+        }
+      }
+      unchecked {
+        _i++;
       }
     }
 
@@ -261,14 +273,18 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Check for gift restrictions
     // TODO: CHECK FOR POSSIBLE VULNERABILITY
-    for (uint256 i = 0; i < currentGift.restrictions.length; i++) {
+    uint256 _restrictionsLength = currentGift.restrictions.length;
+    for (uint256 _i = 0; _i < _restrictionsLength; ) {
       if (
         !restrictionController.checkRestriction(
           _receiver,
-          currentGift.restrictions[i].id,
-          currentGift.restrictions[i].args
+          currentGift.restrictions[_i].id,
+          currentGift.restrictions[_i].args
         )
-      ) revert UnmetRestriction(currentGift.restrictions[i].id);
+      ) revert UnmetRestriction(currentGift.restrictions[_i].id);
+      unchecked {
+        _i++;
+      }
     }
 
     // Transfer NFTs to the recipient of the gift.
@@ -289,11 +305,14 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   function getUnclaimedGifts() external view returns (Gift[] memory giftsTemp) {
     giftsTemp = new Gift[](giftCounter);
     uint256 count;
-    for (uint256 _i = 1; _i <= giftCounter; _i++) {
+    for (uint256 _i = 1; _i <= giftCounter; ) {
       if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
         giftsTemp[count] = allGifts[_i];
         //giftsTemp[count].giftID = _i;
         count += 1;
+      }
+      unchecked {
+        _i++;
       }
     }
 
@@ -342,8 +361,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     uint256 arrayLength = _giftIDs.length;
     if (arrayLength == 0) revert InvalidGift();
     if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
-    for (uint256 _i = 0; _i < arrayLength; _i++) {
+    for (uint256 _i = 0; _i < arrayLength; ) {
       cancelGift(_giftIDs[_i]);
+      unchecked {
+        _i++;
+      }
     }
   }
 
@@ -367,11 +389,14 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   /// @dev Transfers multiple arbitrary ERC20 / ERC721 / ERC1155 tokens.
   function _transferTokenBatch(address _from, address _to, Token[] memory _tokens) internal {
     uint256 nativeTokenValue;
-    for (uint256 i = 0; i < _tokens.length; i += 1) {
-      if (_tokens[i].assetContract == CurrencyTransferLib.NATIVE_TOKEN && _to == address(this)) {
+    for (uint256 i = 0; i < _tokens.length; ) {
+      if (_to == address(this) && _tokens[i].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
         nativeTokenValue += _tokens[i].amount;
       } else {
         _transferToken(_from, _to, _tokens[i]);
+      }
+      unchecked {
+        i++;
       }
     }
     if (nativeTokenValue != 0) {
