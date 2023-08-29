@@ -296,14 +296,14 @@ describe('Gifts: Basics', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWithCustomError(
           giftContract,
-          'InvalidVerifier',
+          'GiftAlreadyClaimed', //InvalidVerifier
         );
       });
       it('Should revert when claiming already claimed gift', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
         await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWithCustomError(
           giftContract,
-          'InvalidVerifier',
+          'GiftAlreadyClaimed', //InvalidVerifier
         );
       });
     });

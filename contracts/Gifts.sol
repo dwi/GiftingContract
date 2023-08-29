@@ -23,6 +23,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   address internal immutable nativeTokenWrapper;
   uint256 public constant MAX_RESTRICTIONS_PER_GIFT = 10;
   uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
+
   uint256 private giftCounter;
 
   struct Restriction {
@@ -73,6 +74,19 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
   receive() external payable virtual {
     require(msg.sender == nativeTokenWrapper, "caller not native token wrapper.");
+  }
+
+  modifier validGift(uint256 _giftID) {
+    _checkGiftValidity(_giftID);
+    _;
+  }
+
+  function _checkGiftValidity(uint256 _giftID) internal view virtual {
+    Gift storage currentGift = allGifts[_giftID];
+    // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
+    if (currentGift.cancelled) revert GiftAlreadyCancelled();
+    if (currentGift.claimed) revert GiftAlreadyClaimed();
+    if (currentGift.creator == address(0)) revert InvalidGift();
   }
 
   /**
@@ -127,7 +141,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     uint256 _tokensLength = _tokens.length;
 
-    // Generate a unique gift ID
+    // Get a new unique gift ID
     giftCounter++;
     uint256 giftID = giftCounter;
 
@@ -167,15 +181,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     emit GiftCreated(giftID, msg.sender);
   }
 
-  /**
-   * @dev Create a new gift with no restrictions
-   *
-   * @param _tokens Array of Token structs
-   * @param _verifier Address of a verifier
-   *
-   */
   function createGift(Token[] calldata _tokens, address _verifier) public payable {
-    createGift(_tokens, new Restriction[](0), _verifier);
+    Restriction[] memory empty = new Restriction[](0);
+    createGift(_tokens, empty, _verifier);
   }
 
   /**
@@ -189,7 +197,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    *
    */
   function createGifts(
-    // always has to have restrictions, even empty
     Token[][] calldata _tokensArray,
     Restriction[][] memory _restrictions,
     address[] calldata _verifier
@@ -200,6 +207,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // remaining balance after creating gifts - handle refunds
     uint256 _remainingBalance = msg.value;
+
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
     for (uint256 _i = 0; _i < arrayLength; ) {
       createGift(_tokensArray[_i], _restrictions[_i], _verifier[_i]);
@@ -254,21 +262,21 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @param _receiver Who should receive the gift
    * @param _signature The signed message from the recipient of the gift.
    */
-  function claimGift(uint256 _giftID, address _receiver, bytes calldata _signature) external {
+  function claimGift(uint256 _giftID, address _receiver, bytes calldata _signature) external validGift(_giftID) {
     // Verify that the recipient of the gift is the same as the signer of the message.
     address _verifier = getVerifier(_giftID, _receiver, _signature);
     if (allVerifiers[_verifier] != _giftID) revert InvalidVerifier();
 
     // Retrieve the current gift from the mapping.
-    Gift memory currentGift = allGifts[_giftID];
+    Gift storage currentGift = allGifts[_giftID];
 
-    if (currentGift.cancelled) revert GiftAlreadyCancelled();
-    if (currentGift.claimed) revert GiftAlreadyClaimed();
-    if (currentGift.creator == address(0)) revert InvalidGift();
+    // if (currentGift.cancelled) revert GiftAlreadyCancelled();
+    // if (currentGift.claimed) revert GiftAlreadyClaimed();
+    // if (currentGift.creator == address(0)) revert InvalidGift();
     if (currentGift.creator == _receiver) revert Unauthorized();
 
     // Check for gift restrictions
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY BYPASSING THE RESTRICTION
     uint256 _restrictionsLength = currentGift.restrictions.length;
     for (uint256 _i = 0; _i < _restrictionsLength; ) {
       if (
@@ -319,23 +327,38 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   }
 
   /**
-   * @dev Cancel a gift created by a caller
+   * @dev Cancel a set of gifts
    *
    * Requirements:
-   * - Valid _giftID of unclaimed active gift
+   * - Valid _giftID[] list of unclaimed active gift
+   *
+   * @param _giftIDs[] array of gifts to be cancelled
+   *
+   */
+  function cancelGifts(uint256[] calldata _giftIDs) external {
+    //console.log("Cancel Gifts", _giftIDs.length);
+    uint256 arrayLength = _giftIDs.length;
+    if (arrayLength == 0) revert InvalidGift();
+    if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
+    for (uint256 _i = 0; _i < arrayLength; ) {
+      //console.log(" - Cancel individual gift", _giftIDs[_i]);
+      _cancelGift(_giftIDs[_i]);
+      unchecked {
+        _i++;
+      }
+    }
+  }
+
+  /**
+   * @dev Cancel a gift created by a caller
    *
    * @param _giftID ID of a gift
    *
    */
-  function cancelGift(uint256 _giftID) public {
-    // Retrieve the current gift from the mapping.
-    Gift memory currentGift = allGifts[_giftID];
+  function _cancelGift(uint256 _giftID) internal validGift(_giftID) {
+    Gift storage currentGift = allGifts[_giftID];
 
     // Ensure that the gift can be cancelled
-    // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
-    if (currentGift.cancelled) revert GiftAlreadyCancelled();
-    if (currentGift.claimed) revert GiftAlreadyClaimed();
-    if (currentGift.creator == address(0)) revert InvalidGift();
     if (currentGift.creator != msg.sender) revert Unauthorized();
 
     // Transfer the NFTs back to the gift creator
@@ -345,24 +368,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     allGifts[_giftID].cancelled = true;
 
     emit GiftCancelled(_giftID);
-  }
-
-  /**
-   * @dev Cancel a set of gifts
-   *
-   * @param _giftIDs[] array of gifts to be cancelled
-   *
-   */
-  function cancelGifts(uint256[] calldata _giftIDs) external {
-    uint256 arrayLength = _giftIDs.length;
-    if (arrayLength == 0) revert InvalidGift();
-    if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
-    for (uint256 _i = 0; _i < arrayLength; ) {
-      cancelGift(_giftIDs[_i]);
-      unchecked {
-        _i++;
-      }
-    }
   }
 
   /// @dev Transfers an arbitrary token.
