@@ -118,8 +118,9 @@ describe('Gifts: Basics', async function () {
             amount: 1,
           },
         ];
-        await expect(giftContract.connect(owner).createGift(gift, mockVerifier.address)).to.be.revertedWith(
-          'Sharing code already used',
+        await expect(giftContract.connect(owner).createGift(gift, mockVerifier.address)).to.be.revertedWithCustomError(
+          giftContract,
+          'InvalidVerifier',
         );
       });
       it('Should revert createGift when using invalid ERC721/ERC20 address', async function () {
@@ -279,26 +280,30 @@ describe('Gifts: Basics', async function () {
     describe('Test reverts', function () {
       it('Should revert when claiming your own gift', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
-        await expect(giftContract.connect(owner).claimGift(3, addr1.address, signature)).to.be.revertedWith(
-          'Cannot claim your own gift',
+        await expect(giftContract.connect(owner).claimGift(3, addr1.address, signature)).to.be.revertedWithCustomError(
+          giftContract,
+          'Unauthorized',
         );
       });
       it('Should revert when claiming gift with wrong claimer', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
-        await expect(giftContract.connect(owner).claimGift(3, owner.address, signature)).to.be.revertedWith(
-          'Invalid verifier',
+        await expect(giftContract.connect(owner).claimGift(3, owner.address, signature)).to.be.revertedWithCustomError(
+          giftContract,
+          'InvalidVerifier',
         );
       });
       it('Should revert when claiming gift with different giftID', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
-        await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWith(
-          'Invalid verifier',
+        await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWithCustomError(
+          giftContract,
+          'InvalidVerifier',
         );
       });
       it('Should revert when claiming already claimed gift', async function () {
         const signature = await signData(mockEncodedSecret, 3, addr1.address as Address);
-        await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWith(
-          'Invalid verifier',
+        await expect(giftContract.connect(owner).claimGift(4, owner.address, signature)).to.be.revertedWithCustomError(
+          giftContract,
+          'InvalidVerifier',
         );
       });
     });
@@ -309,7 +314,10 @@ describe('Gifts: Basics', async function () {
     it('Should cancel unclaimed gift', async function () {
       bal = Number(await mockAxie.balanceOf(owner.address));
       tx = await giftContract.cancelGifts([1]);
-      expect(giftContract.getGift(getVerifierAndCode('gift 1').verifier.address)).to.be.revertedWith('Invalid gift');
+      expect(giftContract.getGift(getVerifierAndCode('gift 1').verifier.address)).to.be.revertedWithCustomError(
+        giftContract,
+        'InvalidGift',
+      );
     });
 
     it('Token IDs are returned back to gift creator', async function () {
@@ -323,19 +331,23 @@ describe('Gifts: Basics', async function () {
 
     describe('Test reverts', function () {
       it('Should revert because of invalid gift ID', async function () {
-        await expect(giftContract.cancelGifts([99999])).to.be.revertedWith('Invalid gift');
+        await expect(giftContract.cancelGifts([99999])).to.be.revertedWithCustomError(giftContract, 'InvalidGift');
       });
       it('Should revert because not owner of that gift', async function () {
-        await expect(giftContract.connect(addr1).cancelGifts([2])).to.be.revertedWith('Only gift creator can cancel');
+        await expect(giftContract.connect(addr1).cancelGifts([2])).to.be.revertedWithCustomError(
+          giftContract,
+          'Unauthorized',
+        );
       });
 
       it('Should revert because already claimed', async function () {
-        await expect(giftContract.connect(addr1).cancelGifts([4])).to.be.revertedWith(
-          'The gift has already been claimed',
+        await expect(giftContract.connect(addr1).cancelGifts([4])).to.be.revertedWithCustomError(
+          giftContract,
+          'GiftAlreadyClaimed',
         );
       });
       it('Should revert because gift already cancelled', async function () {
-        await expect(giftContract.cancelGifts([1])).to.be.revertedWith('The gift has been already cancelled');
+        await expect(giftContract.cancelGifts([1])).to.be.revertedWithCustomError(giftContract, 'GiftAlreadyCancelled');
       });
     });
   });

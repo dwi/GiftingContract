@@ -43,6 +43,19 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     Restriction[] restrictions;
   }
 
+  // Custom error messages
+  error GiftAlreadyCancelled();
+  error GiftAlreadyClaimed();
+  error InvalidGift();
+  error Unauthorized();
+  error InvalidVerifier();
+  error InvalidControllerAddress();
+  error InvalidRestriction();
+  error TooManyRestrictions();
+  error TooManyGiftsToCancel();
+  error UnmetRestriction(string restriction);
+  error InvalidPayload(string message);
+
   mapping(uint256 => Gift) private allGifts; // Mapping from giftID to gift information
 
   mapping(address => uint256) private allVerifiers; // Mapping from verifier address to giftID
@@ -50,6 +63,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   uint256 private giftCounter;
   address internal immutable nativeTokenWrapper;
   IRestrictionControl private restrictionController;
+  uint256 public constant MAX_RESTRICTIONS_PER_GIFT = 10;
+  uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
 
   /**
    * @dev Constructor function
@@ -70,9 +85,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @notice Need to make sure the restriction controller is correct
    */
   function updateController(address _restrictionController) external onlyOwner {
-    require(_restrictionController.code.length > 0, "Invalid contract address");
-    require(_restrictionController.isRestrictionControl(), "Invalid interface");
-    require(_restrictionController != address(0), "Zero address");
+    if (_restrictionController.code.length == 0) revert InvalidControllerAddress(); //, "Invalid contract address");
+    if (!_restrictionController.isRestrictionControl()) revert InvalidControllerAddress(); //, "Invalid interface");
+    if (_restrictionController == address(0)) revert InvalidControllerAddress(); //, "Zero address");
     restrictionController = IRestrictionControl(_restrictionController);
     emit ControllerUpdated(_restrictionController);
   }
@@ -111,8 +126,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    *
    */
   function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public payable {
-    require(_verifier != address(0), "Invalid verifier address");
-    require(allVerifiers[_verifier] == 0, "Sharing code already used");
+    if (_verifier == address(0)) revert InvalidVerifier();
+    if (allVerifiers[_verifier] != 0) revert InvalidVerifier();
+
     uint256 _tokensLength = _tokens.length;
 
     // Generate a unique gift ID
@@ -127,7 +143,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Save the gift information
     allGifts[giftID].creator = msg.sender;
-    // solhint-disable-next-line not-rely-on-time
     allGifts[giftID].createdAt = block.timestamp;
     allGifts[giftID].giftID = giftID;
 
@@ -135,9 +150,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // TODO: CHECK FOR POSSIBLE VULNERABILITY
     uint256 _restrictionsLength = _restrictions.length;
     if (_restrictionsLength > 0) {
-      require(_restrictionsLength <= 10, "Too many restrictions");
+      if (_restrictionsLength > MAX_RESTRICTIONS_PER_GIFT) revert TooManyRestrictions();
       for (uint256 i = 0; i < _restrictionsLength; i++) {
-        require(restrictionController.isValidRestriction(_restrictions[i].id), "Invalid Restriction");
+        if (!restrictionController.isValidRestriction(_restrictions[i].id)) revert InvalidRestriction();
         // Couldn't figure out a way how to pass _restrictions directly to allGifts[giftID].restrictions
         allGifts[giftID].restrictions.push(_restrictions[i]);
       }
@@ -178,7 +193,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     address[] calldata _verifier
   ) external payable {
     uint256 arrayLength = _tokensArray.length;
-    require(_tokensArray.length == arrayLength && _verifier.length == arrayLength, "Arrays must be of the same length");
+    if (_tokensArray.length != arrayLength || _verifier.length != arrayLength)
+      revert InvalidPayload("Arrays must be of the same length");
 
     // remaining balance after creating gifts - handle refunds
     uint256 _remainingBalance = msg.value;
@@ -217,7 +233,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Check if the gift exists and has not been cancelled.
     // TODO: Concern #3 - Should return cancelled/claimed gifts or just return "Invalid gift"?
-    require(allGifts[giftID].creator != address(0) && allGifts[giftID].cancelled == false, "Invalid gift");
+    if (allGifts[giftID].creator == address(0) || allGifts[giftID].cancelled == true) revert InvalidGift();
   }
 
   /**
@@ -233,27 +249,26 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   function claimGift(uint256 _giftID, address _receiver, bytes calldata _signature) external {
     // Verify that the recipient of the gift is the same as the signer of the message.
     address _verifier = getVerifier(_giftID, _receiver, _signature);
-    require(allVerifiers[_verifier] == _giftID, "Invalid verifier");
+    if (allVerifiers[_verifier] != _giftID) revert InvalidVerifier();
 
     // Retrieve the current gift from the mapping.
     Gift memory currentGift = allGifts[_giftID];
 
-    require(!currentGift.cancelled, "Gift has been cancelled");
-    require(!currentGift.claimed, "Gift has already been claimed");
-    require(currentGift.creator != address(0), "Invalid gift");
-    require(currentGift.creator != _receiver, "Cannot claim your own gift");
+    if (currentGift.cancelled) revert GiftAlreadyCancelled();
+    if (currentGift.claimed) revert GiftAlreadyClaimed();
+    if (currentGift.creator == address(0)) revert InvalidGift();
+    if (currentGift.creator == _receiver) revert Unauthorized();
 
     // Check for gift restrictions
     // TODO: CHECK FOR POSSIBLE VULNERABILITY
     for (uint256 i = 0; i < currentGift.restrictions.length; i++) {
-      require(
-        restrictionController.checkRestriction(
+      if (
+        !restrictionController.checkRestriction(
           _receiver,
           currentGift.restrictions[i].id,
           currentGift.restrictions[i].args
-        ),
-        string(abi.encodePacked("Restriction check ", currentGift.restrictions[i].id, " failed"))
-      );
+        )
+      ) revert UnmetRestriction(currentGift.restrictions[i].id);
     }
 
     // Transfer NFTs to the recipient of the gift.
@@ -268,7 +283,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   /**
    * @dev Get all unclaimed gifts created by a given address
    *
-   * @return GiftsTemp The list of all active unclaimedd gifts for caller's address
+   * @return giftsTemp The list of all active unclaimedd gifts for caller's address
    *
    */
   function getUnclaimedGifts() external view returns (Gift[] memory giftsTemp) {
@@ -282,6 +297,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
       }
     }
 
+    // solhint-disable no-inline-assembly
     assembly {
       mstore(giftsTemp, count)
     }
@@ -302,10 +318,10 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Ensure that the gift can be cancelled
     // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
-    require(!currentGift.cancelled, "The gift has been already cancelled");
-    require(!currentGift.claimed, "The gift has already been claimed");
-    require(currentGift.creator != address(0), "Invalid gift");
-    require(currentGift.creator == msg.sender, "Only gift creator can cancel");
+    if (currentGift.cancelled) revert GiftAlreadyCancelled();
+    if (currentGift.claimed) revert GiftAlreadyClaimed();
+    if (currentGift.creator == address(0)) revert InvalidGift();
+    if (currentGift.creator != msg.sender) revert Unauthorized();
 
     // Transfer the NFTs back to the gift creator
     _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
@@ -324,8 +340,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    */
   function cancelGifts(uint256[] calldata _giftIDs) external {
     uint256 arrayLength = _giftIDs.length;
-    require(arrayLength > 0, "No gifts to cancel");
-    require(arrayLength <= 50, "Too many gifts to cancel");
+    if (arrayLength == 0) revert InvalidGift();
+    if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
     for (uint256 _i = 0; _i < arrayLength; _i++) {
       cancelGift(_giftIDs[_i]);
     }

@@ -97,7 +97,7 @@ describe('Gifts: ERC1155 support', async function () {
     it('Should claim a gift', async function () {
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWithCustomError(giftContract, 'InvalidGift');
 
       expect(await mock1155.balanceOf(addr1.address, 1)).to.equal(10);
       expect(await mock1155.balanceOf(addr1.address, 2)).to.equal(20);

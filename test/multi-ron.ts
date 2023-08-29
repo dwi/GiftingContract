@@ -88,13 +88,13 @@ describe('Gifts: RON/WRON Support', async function () {
           value: 199,
         },
       );
-      await expect(tx).to.be.revertedWith('msg.value < amount');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'InsufficientBalance');
     });
     it('Should claim a gift', async function () {
       const startRon = await ethers.provider.getBalance(addr1.address);
       const signature = await signData(code, giftID, addr1.address as Address);
       tx = await giftContract.connect(addr1).claimGift(giftID, addr1.address, signature);
-      expect(giftContract.getGift(verifier.address)).to.be.revertedWith('Invalid gift');
+      expect(giftContract.getGift(verifier.address)).to.be.revertedWithCustomError(giftContract, 'InvalidGift');
       expect(await ethers.provider.getBalance(addr1.address)).above(startRon);
       expect(await mockWRON.balanceOf(giftContract.address)).to.equal(0);
     });

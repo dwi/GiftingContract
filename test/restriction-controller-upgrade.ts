@@ -105,7 +105,7 @@ describe('Gifts: Test restriction controller upgrade', async function () {
       },
     ];
     const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
-    await expect(tx).to.be.revertedWith('Invalid Restriction');
+    await expect(tx).to.be.revertedWithCustomError(giftContract, 'InvalidRestriction');
   });
   it('Should deploy new controller version', async function () {
     const RestrictionControl = await ethers.getContractFactory('RestrictionControl');
@@ -118,13 +118,15 @@ describe('Gifts: Test restriction controller upgrade', async function () {
     ).to.be.revertedWith('Ownable: caller is not the owner');
   });
   it('Should revert updateController: wrong address', async function () {
-    await expect(giftContract.updateController(ethers.Wallet.createRandom().address)).to.be.revertedWith(
-      'Invalid contract address',
+    await expect(giftContract.updateController(ethers.Wallet.createRandom().address)).to.be.revertedWithCustomError(
+      giftContract,
+      'InvalidControllerAddress',
     );
   });
   it('Should revert updateController: wrong contract', async function () {
-    await expect(giftContract.updateController(await giftContract.getAddress())).to.be.revertedWith(
-      'Invalid interface',
+    await expect(giftContract.updateController(await giftContract.getAddress())).to.be.revertedWithCustomError(
+      giftContract,
+      'InvalidControllerAddress',
     );
   });
   it('Should correctly change restriction control address', async function () {
@@ -146,7 +148,7 @@ describe('Gifts: Test restriction controller upgrade', async function () {
 
   it('Should Revert claiming a gift: blessing: false', async function () {
     const tx = claimGiftTx(addr1, '8');
-    await expect(tx).to.be.revertedWith('Restriction check hasBlessingStatus failed');
+    await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('hasBlessingStatus');
   });
 
   it('Should Activate Blessing', async function () {

@@ -14,6 +14,9 @@ library CurrencyTransferLib {
   /// @dev The address interpreted as native token of the chain.
   address public constant NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
+  error InsufficientBalance(uint256 available, uint256 required);
+  error NativeTokenTransferFailed();
+
   /// @dev Transfers a given amount of currency.
   function transferCurrency(address _currency, address _from, address _to, uint256 _amount) internal {
     if (_amount == 0) {
@@ -46,7 +49,7 @@ library CurrencyTransferLib {
         safeTransferNativeTokenWithWrapper(_to, _amount, _nativeTokenWrapper);
       } else if (_to == address(this)) {
         // store native currency in wron
-        require(_amount <= msg.value, "msg.value < amount");
+        if (_amount > msg.value) revert InsufficientBalance({available: msg.value, required: _amount});
         IWRON(_nativeTokenWrapper).deposit{value: _amount}();
       } else {
         safeTransferNativeTokenWithWrapper(_to, _amount, _nativeTokenWrapper);
@@ -74,7 +77,7 @@ library CurrencyTransferLib {
     // solhint-disable avoid-low-level-calls
     // slither-disable-next-line low-level-calls
     (bool success, ) = to.call{value: value}("");
-    require(success, "native token transfer failed");
+    if (!success) revert NativeTokenTransferFailed();
   }
 
   /// @dev Transfers `amount` of native token to `to`. (With native token wrapping)

@@ -165,7 +165,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
         },
       ];
       const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
-      await expect(tx).to.be.revertedWith('Invalid Restriction');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'InvalidRestriction');
     });
     it('Should Create a #9 gift: Atia Blessing & Invalid Restriction', async function () {
       const restrictions = [
@@ -179,7 +179,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
         },
       ];
       const tx = createRandomSingleERC721Gift(owner, '9', restrictions);
-      await expect(tx).to.be.revertedWith('Invalid Restriction');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'InvalidRestriction');
     });
   });
   describe('Claim Gifts', function () {
@@ -189,7 +189,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
     });
     it('Should Revert #2: No Blessing ❌', async function () {
       const tx = claimGiftTx(addr1, '2');
-      await expect(tx).to.be.revertedWith('Restriction check isBlessingActive failed');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('isBlessingActive');
     });
     it('Should Claim #2: Blessing Active', async function () {
       const tx = claimGiftTx(owner, '2');
@@ -197,7 +197,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
     });
     it('Should Revert #3: Atia Streak ❌', async function () {
       const tx = claimGiftTx(addr1, '3');
-      await expect(tx).to.be.revertedWith('Restriction check hasBlessingStreak failed');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('hasBlessingStreak');
     });
     it('Should Claim #4: Atia Streak ✅', async function () {
       const tx = claimGiftTx(addr1, '4');
@@ -205,7 +205,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
     });
     it('Should Revert #5: Streak ✅ but Blessing ❌', async function () {
       const tx = claimGiftTx(addr1, '5');
-      await expect(tx).to.be.revertedWith('Restriction check isBlessingActive failed');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('isBlessingActive');
     });
 
     it('Should Activate Atia Shrine: addr1', async function () {
@@ -218,7 +218,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
     });
     it('Should Revert #6: Streak ✅ but NoBlessing ❌ (blessing is active)', async function () {
       const tx = claimGiftTx(addr1, '6');
-      await expect(tx).to.be.revertedWith('Restriction check isBlessingInactive failed');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('isBlessingInactive');
     });
     it('Should Claim #6: Streak ✅ & NoBlessing ✅ (user has inactive blessing)', async function () {
       const tx = claimGiftTx(addr2, '6');
@@ -229,7 +229,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
       const balance = await mockAXS.connect(addr1).balanceOf(addr1.address);
       await mockAXS.connect(addr1).transfer(addr2.address, balance);
       const tx = claimGiftTx(addr1, '7');
-      await expect(tx).to.be.revertedWith('Restriction check hasTokenBalance failed');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('hasTokenBalance');
     });
     it('Should Claim #7: More than 1000 AXS ✅', async function () {
       await mockAXS.connect(addr2).mint(1001);
@@ -253,7 +253,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
       it('Should Revert #10: Signer does not have Atia Blessing activated', async function () {
         const signature = await signData(code, giftID, addr2.address as Address);
         const tx = giftContract.connect(operator).claimGift(giftID, addr2.address, signature);
-        await expect(tx).to.be.revertedWith('Restriction check isBlessingActive failed');
+        await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('isBlessingActive');
       });
       it('Should Claim #10: Signed does have Atia Blessing activated', async function () {
         const signature = await signData(code, giftID, addr1.address as Address);
