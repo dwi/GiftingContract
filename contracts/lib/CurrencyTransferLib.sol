@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// https://github.com/thirdweb-dev/contracts/blob/main/contracts/lib/CurrencyTransferLib.sol
 pragma solidity ^0.8.0;
 
+// https://github.com/thirdweb-dev/contracts/blob/main/contracts/lib/CurrencyTransferLib.sol
 /// @author thirdweb
 
 // Helper interfaces

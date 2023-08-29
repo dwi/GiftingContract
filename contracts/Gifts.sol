@@ -10,17 +10,20 @@ import {IRestrictionControl} from "./Interfaces/IRestrictionControl.sol";
 import {InterfaceChecker, IERC1155, IERC721} from "./lib/InterfaceChecker.sol";
 import {CurrencyTransferLib} from "./lib/CurrencyTransferLib.sol";
 
-import "hardhat/console.sol";
-
 /**
- * @title NFT Gifts Smart Contract
+ * @title Token Gifting Smart Contract
  * @author dw
  *
- * @dev Allows trustlessly give ERC721/ERC20 gifts to not yet known recepients.
+ * @dev Allows trustlessly give ERC20/ERC721/ERC1115/RON (aka 'Token') gifts to not yet known recepients.
  *
  */
 contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   using InterfaceChecker for address;
+  IRestrictionControl private restrictionController;
+  address internal immutable nativeTokenWrapper;
+  uint256 public constant MAX_RESTRICTIONS_PER_GIFT = 10;
+  uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
+  uint256 private giftCounter;
 
   struct Restriction {
     string id;
@@ -57,14 +60,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   error InvalidPayload(string message);
 
   mapping(uint256 => Gift) private allGifts; // Mapping from giftID to gift information
-
   mapping(address => uint256) private allVerifiers; // Mapping from verifier address to giftID
-
-  uint256 private giftCounter;
-  address internal immutable nativeTokenWrapper;
-  IRestrictionControl private restrictionController;
-  uint256 public constant MAX_RESTRICTIONS_PER_GIFT = 10;
-  uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
 
   /**
    * @dev Constructor function
@@ -117,7 +113,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @dev Create a new gift
    *
    * Requirements:
-   * - ERC721/ERC20 Token addresses are valid
+   * - Token addresses are valid
    * - This contract is approved on token contract
    * - valid and unique _verifier
    *
@@ -135,7 +131,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     giftCounter++;
     uint256 giftID = giftCounter;
 
-    // Transfer NFTs/ERC20 tokens to smart contract
+    // Transfer tokens to smart contract
     // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
     for (uint256 _i = 0; _i < _tokensLength; ) {
       allGifts[giftID].tokens.push(_tokens[_i]);
@@ -369,7 +365,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     }
   }
 
-  /// @dev Transfers an arbitrary ERC20 / ERC721 / ERC1155 token.
+  /// @dev Transfers an arbitrary token.
   function _transferToken(address _from, address _to, Token memory _token) internal {
     if (_token.assetContract == CurrencyTransferLib.NATIVE_TOKEN || _token.assetContract.isERC20()) {
       CurrencyTransferLib.transferCurrencyWithWrapper(
@@ -386,7 +382,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     }
   }
 
-  /// @dev Transfers multiple arbitrary ERC20 / ERC721 / ERC1155 tokens.
+  /// @dev Transfers multiple arbitrary tokens.
   function _transferTokenBatch(address _from, address _to, Token[] memory _tokens) internal {
     uint256 nativeTokenValue;
     for (uint256 i = 0; i < _tokens.length; ) {

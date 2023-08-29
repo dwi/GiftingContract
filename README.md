@@ -1,26 +1,30 @@
-# ERC721/ERC20 Trustless gifting contract for unknown receivers
+# Trustless ERC20/ERC721/ERC1155/native token gifting contract for unknown receivers
 
-- `creator` - the person giving away ERC721/ERC20 tokens by sharing a `secret sharing code` with the receiver
+This smart contract allows trustless gifting of ERC20/ERC721/ERC1115/native tokens (hereafter referred to as `tokens`) to unknown recipients.
+
+Basic Glossary:
+
+- `creator` - the person giving away tokens by sharing a `secret sharing code` with the receiver
 - `receiver` - the person who has the secret sharing code and is allowed to claim a gift
-- `sharing code` - a set of random/custom strings used as a base "salt" to generate a private key for the `verifier`
+- `sharing code` - a set of random/custom strings used as a base "salt" to generate a private key of the `verifier`
 - `verifier` - a signer used in the verification process to verify the validity of a gift and the receiver
 
 ## Gift+Claim Flow
 
-- The `Creator` creates a gift with giftable content and the address of a verifier (the verifier is generated in the UI based on the provided custom `sharing code` or randomly generated `sharing code`)
-- The `Creator` shares the `sharing code` with the receiver
-- The `Receiver` opens a Gifting UI where the `sharing code` is decoded to the `verifier` signer. The claiming signature is generated in the background when the `Receiver` connects their wallet.
+- The `creator` creates a gift with giftable content and the address of a verifier (the verifier is generated in the UI based on the provided custom `sharing code` or randomly generated `sharing code`)
+- The `creator` shares the `sharing code` with the receiver
+- The `receiver` opens a Gifting UI where the `sharing code` is decoded to the `verifier` signer. The claiming signature is generated in the background when the `receiver` connects their wallet.
 - The signature contains the `receiver` address.
-- This signature can be used by the `Receiver` or any "operator" (if the `Receiver` has no RON for gas fees) to claim the gift using `claimGift(giftID, receiver, signature)`. The gift is transferred to the receiver.
+- This signature can be used by the `receiver` or any "operator" (if the `receiver` has no RON for gas fees) to claim the gift using `claimGift(giftID, receiver, signature)`. The gift is transferred to the receiver.
 
 ![image](https://user-images.githubusercontent.com/1337260/206867935-b32edc3a-4dcd-4fe6-bc25-5a512c4d03b8.png)
 
-## Gifting Restrictions
+## Restriction Controller
 
-- The `Creator` can set additional restrictions during gift creation, such as:
+- The `creator` can set additional restrictions during gift creation, such as:
   - Atia's Blessing status
   - Atia's Blessing strike higher than `x`
-  - Holding a specific amount of ERC721 or ERC20 tokens
+  - Holding a specific amount of ERC721, ERC20 or native tokens
 - Whoever has the `sharing code` must meet the defined criteria to successfully claim the gift.
 
 ## Contract Structure
@@ -68,3 +72,4 @@
 - Should we add an onlyOwner function to cancel gifts on behalf of someone else?
 - Or make contract pausable and add emergencyExit to cancel all existing gifts, return assets to owners and pause contract?
 - Should the contract be pausable?
+
