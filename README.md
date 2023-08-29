@@ -66,4 +66,5 @@
 ### #7 Any missing/useless functions?
 
 - Should we add an onlyOwner function to cancel gifts on behalf of someone else?
+- Or make contract pausable and add emergencyExit to cancel all existing gifts, return assets to owners and pause contract?
 - Should the contract be pausable?
