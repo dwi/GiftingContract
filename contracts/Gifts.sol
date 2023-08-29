@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.18;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import "./Interfaces/IRestrictionControl.sol";
-import "./lib/InterfaceChecker.sol";
-import "./lib/CurrencyTransferLib.sol";
+import {IRestrictionControl} from "./Interfaces/IRestrictionControl.sol";
+import {InterfaceChecker, IERC1155, IERC721} from "./lib/InterfaceChecker.sol";
+import {CurrencyTransferLib} from "./lib/CurrencyTransferLib.sol";
 
 import "hardhat/console.sol";
 
@@ -41,7 +39,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     bool claimed; // Flag to track if the Gift has been claimed
     bool cancelled; // Flag to track if the Gift has been cancelled
     address creator; // Address of the Gift creator
-    uint createdAt; // Timestamp of when the Gift was created
+    uint256 createdAt; // Timestamp of when the Gift was created
     Restriction[] restrictions;
   }
 
@@ -50,8 +48,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   mapping(address => uint256) private allVerifiers; // Mapping from verifier address to giftID
 
   uint256 private giftCounter;
-  IRestrictionControl private restrictionController;
   address internal immutable nativeTokenWrapper;
+  IRestrictionControl private restrictionController;
 
   /**
    * @dev Constructor function
@@ -83,7 +81,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @dev Event emitted when a new gift is created
    * @notice Removed emitting of individual token contained in the gift
    */
-  event GiftCreated(uint256 indexed _giftID, address indexed _createdBy, uint _createdAt);
+  event GiftCreated(uint256 indexed _giftID, address indexed _createdBy);
 
   /**
    * @dev Event emitted when a gift is claimed
@@ -113,9 +111,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    *
    */
   function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public payable {
-    require(_verifier != address(0), "NFTGifts: Invalid verifier address");
-    require(allVerifiers[_verifier] == 0, "NFTGifts: Sharing code already used");
-    uint _tokensLength = _tokens.length;
+    require(_verifier != address(0), "Invalid verifier address");
+    require(allVerifiers[_verifier] == 0, "Sharing code already used");
+    uint256 _tokensLength = _tokens.length;
 
     // Generate a unique gift ID
     giftCounter++;
@@ -129,15 +127,16 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Save the gift information
     allGifts[giftID].creator = msg.sender;
+    // solhint-disable-next-line not-rely-on-time
     allGifts[giftID].createdAt = block.timestamp;
     allGifts[giftID].giftID = giftID;
 
     // Attach restriction rules to the gift
     // TODO: CHECK FOR POSSIBLE VULNERABILITY
-    uint _restrictionsLength = _restrictions.length;
+    uint256 _restrictionsLength = _restrictions.length;
     if (_restrictionsLength > 0) {
-      require(_restrictionsLength <= 10, "NFTGifts: Too many restrictions");
-      for (uint i = 0; i < _restrictionsLength; i++) {
+      require(_restrictionsLength <= 10, "Too many restrictions");
+      for (uint256 i = 0; i < _restrictionsLength; i++) {
         require(restrictionController.isValidRestriction(_restrictions[i].id), "Invalid Restriction");
         // Couldn't figure out a way how to pass _restrictions directly to allGifts[giftID].restrictions
         allGifts[giftID].restrictions.push(_restrictions[i]);
@@ -148,7 +147,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     _transferTokenBatch(msg.sender, address(this), _tokens);
 
-    emit GiftCreated(giftID, msg.sender, block.timestamp);
+    emit GiftCreated(giftID, msg.sender);
   }
 
   /**
@@ -178,11 +177,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     Restriction[][] memory _restrictions,
     address[] calldata _verifier
   ) external payable {
-    uint arrayLength = _tokensArray.length;
-    require(
-      _tokensArray.length == arrayLength && _verifier.length == arrayLength,
-      "NFTGifts: Arrays must be of the same length"
-    );
+    uint256 arrayLength = _tokensArray.length;
+    require(_tokensArray.length == arrayLength && _verifier.length == arrayLength, "Arrays must be of the same length");
 
     // remaining balance after creating gifts - handle refunds
     uint256 _remainingBalance = msg.value;
@@ -221,7 +217,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Check if the gift exists and has not been cancelled.
     // TODO: Concern #3 - Should return cancelled/claimed gifts or just return "Invalid gift"?
-    require(allGifts[giftID].creator != address(0) && allGifts[giftID].cancelled == false, "NFTGifts: Invalid gift");
+    require(allGifts[giftID].creator != address(0) && allGifts[giftID].cancelled == false, "Invalid gift");
   }
 
   /**
@@ -237,19 +233,19 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   function claimGift(uint256 _giftID, address _receiver, bytes calldata _signature) external {
     // Verify that the recipient of the gift is the same as the signer of the message.
     address _verifier = getVerifier(_giftID, _receiver, _signature);
-    require(allVerifiers[_verifier] == _giftID, "NFTGifts: Invalid verifier");
+    require(allVerifiers[_verifier] == _giftID, "Invalid verifier");
 
     // Retrieve the current gift from the mapping.
     Gift memory currentGift = allGifts[_giftID];
 
-    require(!currentGift.cancelled, "NFTGifts: Gift has been cancelled");
-    require(!currentGift.claimed, "NFTGifts: Gift has already been claimed");
-    require(currentGift.creator != address(0), "NFTGifts: Invalid gift");
-    require(currentGift.creator != _receiver, "NFTGifts: Cannot claim your own gift");
+    require(!currentGift.cancelled, "Gift has been cancelled");
+    require(!currentGift.claimed, "Gift has already been claimed");
+    require(currentGift.creator != address(0), "Invalid gift");
+    require(currentGift.creator != _receiver, "Cannot claim your own gift");
 
     // Check for gift restrictions
     // TODO: CHECK FOR POSSIBLE VULNERABILITY
-    for (uint i = 0; i < currentGift.restrictions.length; i++) {
+    for (uint256 i = 0; i < currentGift.restrictions.length; i++) {
       require(
         restrictionController.checkRestriction(
           _receiver,
@@ -275,19 +271,19 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @return GiftsTemp The list of all active unclaimedd gifts for caller's address
    *
    */
-  function getUnclaimedGifts() external view returns (Gift[] memory GiftsTemp) {
-    GiftsTemp = new Gift[](giftCounter);
+  function getUnclaimedGifts() external view returns (Gift[] memory giftsTemp) {
+    giftsTemp = new Gift[](giftCounter);
     uint256 count;
-    for (uint _i = 1; _i <= giftCounter; _i++) {
+    for (uint256 _i = 1; _i <= giftCounter; _i++) {
       if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
-        GiftsTemp[count] = allGifts[_i];
-        //GiftsTemp[count].giftID = _i;
+        giftsTemp[count] = allGifts[_i];
+        //giftsTemp[count].giftID = _i;
         count += 1;
       }
     }
 
     assembly {
-      mstore(GiftsTemp, count)
+      mstore(giftsTemp, count)
     }
   }
 
@@ -306,10 +302,10 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
     // Ensure that the gift can be cancelled
     // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
-    require(!currentGift.cancelled, "NFTGifts: The gift has been already cancelled");
-    require(!currentGift.claimed, "NFTGifts: The gift has already been claimed");
-    require(currentGift.creator != address(0), "NFTGifts: Invalid gift");
-    require(currentGift.creator == msg.sender, "NFTGifts: Only gift creator can cancel the gift");
+    require(!currentGift.cancelled, "The gift has been already cancelled");
+    require(!currentGift.claimed, "The gift has already been claimed");
+    require(currentGift.creator != address(0), "Invalid gift");
+    require(currentGift.creator == msg.sender, "Only gift creator can cancel");
 
     // Transfer the NFTs back to the gift creator
     _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
@@ -328,8 +324,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    */
   function cancelGifts(uint256[] calldata _giftIDs) external {
     uint256 arrayLength = _giftIDs.length;
-    require(arrayLength > 0, "NFTGifts: No gifts to cancel");
-    require(arrayLength <= 50, "NFTGifts: Too many gifts to cancel");
+    require(arrayLength > 0, "No gifts to cancel");
+    require(arrayLength <= 50, "Too many gifts to cancel");
     for (uint256 _i = 0; _i < arrayLength; _i++) {
       cancelGift(_giftIDs[_i]);
     }

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
-import "../Interfaces/IAtiaShrine.sol";
-import "../Interfaces/IToken.sol";
-import "../Interfaces/IRestrictionControl.sol";
+import {IAtiaShrine} from "../Interfaces/IAtiaShrine.sol";
+import {IToken} from "../Interfaces/IToken.sol";
+import {IRestrictionControl} from "../Interfaces/IRestrictionControl.sol";
 
 /**
  * @title RestrictionControl
@@ -102,7 +100,7 @@ contract RestrictionControl is Initializable, IRestrictionControl, ERC165 {
    */
   function hasBlessingStreak(address user, bytes memory args) public view returns (bool) {
     uint256 minAmount = abi.decode(args, (uint256));
-    (uint streakAmount, ) = atiaShrineContract.getStreak(user);
+    (uint256 streakAmount, ) = atiaShrineContract.getStreak(user);
     return streakAmount > minAmount;
   }
 
