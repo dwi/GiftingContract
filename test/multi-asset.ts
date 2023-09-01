@@ -65,14 +65,21 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     var tx: any;
     it('Should generate a single ERC20 gift', async function () {
       await mockWETH.approve(giftContract.address, 500000);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
           amount: 500000,
         },
       ];
-      const tx = await giftContract.createGift(gift, verifier.address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0]);
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(500000);
@@ -87,16 +94,21 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     });
     it('Should revert when ERC20 has low/no allowance', async () => {
       await mockWETH.approve(giftContract.address, 0);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
           amount: 1,
         },
       ];
-      await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
-        'ERC20: insufficient allowance',
-      );
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      await expect(giftContract.createGift(gift[0])).to.be.revertedWith('ERC20: insufficient allowance');
     });
     describe('Events', function () {
       it('Should emit matching GiftClaimed event', async function () {
@@ -113,7 +125,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       await mockWETH.approve(giftContract.address, 123123);
       await mockUSDC.approve(giftContract.address, 90045);
       await mockAXS.approve(giftContract.address, 123123);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
@@ -130,7 +142,14 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
           amount: 123123,
         },
       ];
-      const tx = await giftContract.createGift(gift, verifier.address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0]);
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWETH.balanceOf(giftContract.address)).to.equal(123123);
@@ -149,7 +168,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     });
     it('Should revert when ERC20 has low/no allowance', async () => {
       await mockWETH.approve(giftContract.address, 0);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
@@ -166,9 +185,14 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
           amount: 123123,
         },
       ];
-      await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
-        'ERC20: insufficient allowance',
-      );
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      await expect(giftContract.createGift(gift[0])).to.be.revertedWith('ERC20: insufficient allowance');
     });
     describe('Events', function () {
       it('Should emit matching GiftClaimed event', async function () {
@@ -187,7 +211,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       await mockLand.setApprovalForAll(giftContract.address, true);
       await mockAxie.setApprovalForAll(giftContract.address, true);
       await mock1155.setApprovalForAll(giftContract.address, true);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
@@ -229,7 +253,14 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
           amount: BigInt(2 * 10e17),
         },
       ];
-      const tx = await giftContract['createGift((address,uint256,uint256)[],address)'](gift, verifier.address, {
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGifts(gift, {
         value: BigInt(2 * 10e17),
       });
       const res = await tx.wait();
@@ -266,7 +297,7 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
     });
     it('Should revert when ERC20 has low/no allowance', async () => {
       await mockWETH.approve(giftContract.address, 0);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
@@ -278,14 +309,19 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
           amount: 0,
         },
       ];
-      await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
-        'ERC20: insufficient allowance',
-      );
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      await expect(giftContract.createGift(gift[0])).to.be.revertedWith('ERC20: insufficient allowance');
     });
     it('Should revert when ERC721 not allowed', async () => {
       await mockWETH.approve(giftContract.address, 1);
       await mockAxie.setApprovalForAll(giftContract.address, false);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockWETH.address,
           tokenId: 0,
@@ -297,7 +333,14 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
           amount: 0,
         },
       ];
-      await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      await expect(giftContract.createGift(gift[0])).to.be.revertedWith(
         'ERC721: caller is not token owner or approved',
       );
     });
@@ -320,163 +363,180 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       await mockLand.batchMint(20000, 10);
 
       const verifiers = [
-        getVerifierAndCode('multigift1').verifier.address,
-        getVerifierAndCode('multigift2').verifier.address,
-        getVerifierAndCode('multigift3').verifier.address,
-        getVerifierAndCode('multigift4').verifier.address,
-        getVerifierAndCode('multigift5').verifier.address,
+        getVerifierAndCode('multigift 1').verifier.address,
+        getVerifierAndCode('multigift 2').verifier.address,
+        getVerifierAndCode('multigift 3').verifier.address,
+        getVerifierAndCode('multigift 4').verifier.address,
+        getVerifierAndCode('multigift 5').verifier.address,
       ];
       const gift = [
-        [
-          {
-            assetContract: mockAxie.address,
-            tokenId: 10000,
-            amount: 0,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 10,
-          },
-          {
-            assetContract: NATIVE_TOKEN_ADDRESS,
-            tokenId: 0,
-            amount: BigInt(5 * 10e17),
-          },
-        ],
-        [
-          {
-            assetContract: mockAxie.address,
-            tokenId: 10001,
-            amount: 0,
-          },
-          {
-            assetContract: mockLand.address,
-            tokenId: 20000,
-            amount: 0,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 50,
-          },
-          {
-            assetContract: mock1155.address,
-            tokenId: 1,
-            amount: 1,
-          },
-        ],
-        [
-          {
-            assetContract: mockAxie.address,
-            tokenId: 10002,
-            amount: 0,
-          },
-          {
-            assetContract: mockLand.address,
-            tokenId: 20001,
-            amount: 0,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 30,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 31,
-          },
-        ],
-        [
-          {
-            assetContract: mockLand.address,
-            tokenId: 20002,
-            amount: 0,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 100,
-          },
-          {
-            assetContract: mockUSDC.address,
-            tokenId: 0,
-            amount: 200,
-          },
-          {
-            assetContract: mockAXS.address,
-            tokenId: 0,
-            amount: 300,
-          },
-          {
-            assetContract: mock1155.address,
-            tokenId: 1,
-            amount: 1,
-          },
-          {
-            assetContract: mock1155.address,
-            tokenId: 2,
-            amount: 1,
-          },
-        ],
-        [
-          {
-            assetContract: mockAxie.address,
-            tokenId: 10003,
-            amount: 0,
-          },
-          {
-            assetContract: mockLand.address,
-            tokenId: 20003,
-            amount: 0,
-          },
-          {
-            assetContract: mockWETH.address,
-            tokenId: 0,
-            amount: 42,
-          },
-          {
-            assetContract: mockUSDC.address,
-            tokenId: 0,
-            amount: 10,
-          },
-          {
-            assetContract: mockUSDC.address,
-            tokenId: 0,
-            amount: 10,
-          },
-          {
-            assetContract: mockLand.address,
-            tokenId: 20004,
-            amount: 0,
-          },
-          {
-            assetContract: mockAXS.address,
-            tokenId: 0,
-            amount: 100,
-          },
-          {
-            assetContract: NATIVE_TOKEN_ADDRESS,
-            tokenId: 0,
-            amount: BigInt(2 * 10e17),
-          },
-          {
-            assetContract: mock1155.address,
-            tokenId: 1,
-            amount: 20,
-          },
-          {
-            assetContract: mock1155.address,
-            tokenId: 2,
-            amount: 30,
-          },
-        ],
+        {
+          tokens: [
+            {
+              assetContract: mockAxie.address,
+              tokenId: 10000,
+              amount: 0,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 10,
+            },
+            {
+              assetContract: NATIVE_TOKEN_ADDRESS,
+              tokenId: 0,
+              amount: BigInt(5 * 10e17),
+            },
+          ],
+          restrictions: [],
+          verifier: verifiers[0],
+        },
+        {
+          tokens: [
+            {
+              assetContract: mockAxie.address,
+              tokenId: 10001,
+              amount: 0,
+            },
+            {
+              assetContract: mockLand.address,
+              tokenId: 20000,
+              amount: 0,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 50,
+            },
+            {
+              assetContract: mock1155.address,
+              tokenId: 1,
+              amount: 1,
+            },
+          ],
+          restrictions: [],
+          verifier: verifiers[1],
+        },
+        {
+          tokens: [
+            {
+              assetContract: mockAxie.address,
+              tokenId: 10002,
+              amount: 0,
+            },
+            {
+              assetContract: mockLand.address,
+              tokenId: 20001,
+              amount: 0,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 30,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 31,
+            },
+          ],
+          restrictions: [],
+          verifier: verifiers[2],
+        },
+        {
+          tokens: [
+            {
+              assetContract: mockLand.address,
+              tokenId: 20002,
+              amount: 0,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 100,
+            },
+            {
+              assetContract: mockUSDC.address,
+              tokenId: 0,
+              amount: 200,
+            },
+            {
+              assetContract: mockAXS.address,
+              tokenId: 0,
+              amount: 300,
+            },
+            {
+              assetContract: mock1155.address,
+              tokenId: 1,
+              amount: 1,
+            },
+            {
+              assetContract: mock1155.address,
+              tokenId: 2,
+              amount: 1,
+            },
+          ],
+          restrictions: [],
+          verifier: verifiers[3],
+        },
+        {
+          tokens: [
+            {
+              assetContract: mockAxie.address,
+              tokenId: 10003,
+              amount: 0,
+            },
+            {
+              assetContract: mockLand.address,
+              tokenId: 20003,
+              amount: 0,
+            },
+            {
+              assetContract: mockWETH.address,
+              tokenId: 0,
+              amount: 42,
+            },
+            {
+              assetContract: mockUSDC.address,
+              tokenId: 0,
+              amount: 10,
+            },
+            {
+              assetContract: mockUSDC.address,
+              tokenId: 0,
+              amount: 10,
+            },
+            {
+              assetContract: mockLand.address,
+              tokenId: 20004,
+              amount: 0,
+            },
+            {
+              assetContract: mockAXS.address,
+              tokenId: 0,
+              amount: 100,
+            },
+            {
+              assetContract: NATIVE_TOKEN_ADDRESS,
+              tokenId: 0,
+              amount: BigInt(2 * 10e17),
+            },
+            {
+              assetContract: mock1155.address,
+              tokenId: 1,
+              amount: 20,
+            },
+            {
+              assetContract: mock1155.address,
+              tokenId: 2,
+              amount: 30,
+            },
+          ],
+          restrictions: [],
+          verifier: verifiers[4],
+        },
       ];
-
-      expect(
-        await giftContract.createGifts(gift, Array(gift.length).fill([]), verifiers, { value: BigInt(20 * 10e17) }),
-      ).to.emit(giftContract, 'GiftCreated');
+      expect(await giftContract.createGifts(gift, { value: BigInt(20 * 10e17) })).to.emit(giftContract, 'GiftCreated');
 
       expect((await giftContract.getGift(verifiers[0])).claimed).to.equal(false);
       expect((await giftContract.getGift(verifiers[1])).claimed).to.equal(false);
@@ -493,9 +553,9 @@ describe('Gifts: Multi-asset gifts (ERC20 & ERC721 & ERC1155 & RON)', async func
       const claimer = (await ethers.getSigners())[10];
 
       const startRon = await ethers.provider.getBalance(claimer.address);
-      const verifier = getVerifierAndCode('multigift5').verifier.address;
+      const verifier = getVerifierAndCode('multigift 5').verifier.address;
       const giftID = (await giftContract.getGift(verifier)).giftID;
-      const signature = await signData(getVerifierAndCode('multigift5').code, giftID, claimer.address as Address);
+      const signature = await signData(getVerifierAndCode('multigift 5').code, giftID, claimer.address as Address);
 
       expect(await mockWETH.balanceOf(claimer.address)).to.equal(0);
       expect(await mockUSDC.balanceOf(claimer.address)).to.equal(0);

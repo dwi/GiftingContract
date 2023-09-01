@@ -56,7 +56,7 @@ describe('Gifts: ERC1155 support', async function () {
       expect(await mock1155.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
     });
     it('Should generate a multi-gift', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: mock1155.address,
           tokenId: 1,
@@ -68,7 +68,14 @@ describe('Gifts: ERC1155 support', async function () {
           amount: 20,
         },
       ];
-      const tx = await giftContract.createGift(gift, verifier.address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0]);
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mock1155.balanceOf(giftContract.address, 1)).to.equal(10);
@@ -79,7 +86,7 @@ describe('Gifts: ERC1155 support', async function () {
       expect((await giftContract.getGift(verifier.address)).giftID).to.equal(giftID);
     });
     it('Should revert when not enough balance of 1155s', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: mock1155.address,
           tokenId: 1,
@@ -91,7 +98,14 @@ describe('Gifts: ERC1155 support', async function () {
           amount: 1,
         },
       ];
-      const tx = giftContract.createGift(gift, ethers.Wallet.createRandom().address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      const tx = giftContract.createGift(gift[0]);
       await expect(tx).to.be.revertedWith('ERC1155: insufficient balance for transfer');
     });
     it('Should claim a gift', async function () {
@@ -107,7 +121,7 @@ describe('Gifts: ERC1155 support', async function () {
     it('Should revert when collections is not approved', async () => {
       const { verifier, code } = getVerifierAndCode('multi-asset2');
       expect(await mock1155.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
-      const gift = [
+      const tokens = [
         {
           assetContract: mock1155.address,
           tokenId: 1,
@@ -119,7 +133,14 @@ describe('Gifts: ERC1155 support', async function () {
           amount: 20,
         },
       ];
-      const tx = giftContract.connect(addr1).createGift(gift, verifier.address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = giftContract.connect(addr1).createGift(gift[0]);
       await expect(tx).to.be.revertedWith('ERC1155: caller is not token owner or approved');
     });
     describe('Events', function () {

@@ -76,7 +76,7 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
       expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
     });
     it('Should generate a multi-gift', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: mockAxie.address,
           tokenId: 5001,
@@ -98,7 +98,14 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
           amount: 0,
         },
       ];
-      const tx = await giftContract.createGift(gift, verifier.address);
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0]);
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockAxie.ownerOf(5001)).to.equal(giftContract.address);
@@ -117,7 +124,7 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
       const { verifier, code } = getVerifierAndCode('multi-asset2');
       await mockAxie.connect(addr1).setApprovalForAll(giftContract.address, false);
       expect(await mockAxie.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
-      const gift = [
+      const tokens = [
         {
           assetContract: mockAxie.address,
           tokenId: 5001,
@@ -139,10 +146,17 @@ describe('Gifts: Multiple ERC721 in a gift', async function () {
           amount: 0,
         },
       ];
-      expect(giftContract.connect(addr1).createGift(gift, verifier.address)).to.be.reverted;
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      expect(giftContract.connect(addr1).createGift(gift[0])).to.be.reverted;
       await mockLand.connect(addr1).setApprovalForAll(giftContract.address, false);
       expect(await mockLand.isApprovedForAll(addr1.address, giftContract.address)).to.equal(false);
-      expect(giftContract.connect(addr1).createGift(gift, verifier.address)).to.be.revertedWith(
+      expect(giftContract.connect(addr1).createGift(gift[0])).to.be.revertedWith(
         'ERC721: caller is not token owner or approved',
       );
     });

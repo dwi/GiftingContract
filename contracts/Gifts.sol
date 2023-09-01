@@ -26,17 +26,35 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
   uint256 private giftCounter;
 
+  /**
+   * @dev Struct to represent a restriction on a gift.
+   */
   struct Restriction {
     string id;
     bytes args;
   }
 
+  /**
+   * @dev Struct to represent a token in a gift.
+   */
   struct Token {
     address assetContract;
     uint256 tokenId;
     uint256 amount;
   }
 
+  /**
+   * @dev Struct to represent a new gift payload.
+   */
+  struct NewGiftPayload {
+    Token[] tokens;
+    Restriction[] restrictions;
+    address verifier;
+  }
+
+  /**
+   * @dev Struct to represent a gift.
+   */
   struct Gift {
     uint256 giftID;
     Token[] tokens;
@@ -65,6 +83,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
 
   /**
    * @dev Constructor function
+   * @param _nativeTokenWrapper The address of the native token wrapper contract
    * @param _restrictionController The address of the access control contract
    */
   constructor(address _nativeTokenWrapper, address _restrictionController) {
@@ -72,15 +91,26 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     restrictionController = IRestrictionControl(_restrictionController);
   }
 
+  /**
+   * @dev Fallback function to receive payments.
+   */
   receive() external payable virtual {
     require(msg.sender == nativeTokenWrapper, "caller not native token wrapper.");
   }
 
+  /**
+   * @dev Modifier to check if a gift is valid.
+   * @param _giftID The ID of the gift to check.
+   */
   modifier validGift(uint256 _giftID) {
     _checkGiftValidity(_giftID);
     _;
   }
 
+  /**
+   * @dev Checks if a gift is valid.
+   * @param _giftID The ID of the gift to check.
+   */
   function _checkGiftValidity(uint256 _giftID) internal view virtual {
     Gift storage currentGift = allGifts[_giftID];
     // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
@@ -102,51 +132,89 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     emit ControllerUpdated(_restrictionController);
   }
 
-  /**
-   * @dev Event emitted when a new gift is created
-   * @notice Removed emitting of individual token contained in the gift
-   */
   event GiftCreated(uint256 indexed _giftID, address _createdBy);
-
-  /**
-   * @dev Event emitted when a gift is claimed
-   */
   event GiftClaimed(uint256 indexed _giftID, address _claimedBy);
-
-  /**
-   * @dev Event emitted when a gift is cancelled
-   */
   event GiftCancelled(uint256 indexed _giftID);
-
-  /**
-   * @dev Event emitted when restriction controller is updated
-   */
   event ControllerUpdated(address _restrictionController);
 
   /**
-   * @dev Create a new gift
+   * @dev Creates a single gift in the specified payload
    *
-   * Requirements:
-   * - Token addresses are valid
-   * - This contract is approved on token contract
-   * - valid and unique _verifier
-   *
-   * @param _tokens Array of Token structs
-   * @param _verifier Address of a verifier
-   *
+   * @param _newGift The payload containing the gift information
    */
-  function createGift(Token[] calldata _tokens, Restriction[] memory _restrictions, address _verifier) public payable {
+  function createGift(NewGiftPayload calldata _newGift) external payable {
+    uint256 _remainingBalance = msg.value;
+    (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift);
+    _remainingBalance -= nativeTokenValue;
+
+    // Refund RON leftover if any
+    if (_remainingBalance > 0) {
+      payable(msg.sender).transfer(_remainingBalance);
+    }
+
+    emit GiftCreated(giftID, msg.sender);
+  }
+
+  /**
+   * @dev Creates multiple gifts in the specified payload array
+   *
+   * @param _newGift The payloads containing the gift information
+   */
+  function createGifts(NewGiftPayload[] calldata _newGift) external payable {
+    uint256 _arrayLength = _newGift.length;
+    uint256 _remainingBalance = msg.value;
+
+    for (uint256 _i = 0; _i < _arrayLength; ) {
+      (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift[_i]);
+      _remainingBalance -= nativeTokenValue;
+      emit GiftCreated(giftID, msg.sender);
+
+      unchecked {
+        _i++;
+      }
+    }
+
+    // Refund RON leftover if any
+    if (_remainingBalance > 0) {
+      payable(msg.sender).transfer(_remainingBalance);
+    }
+  }
+
+  /**
+   * @dev Processes a gift by creating it and transferring tokens to the contract.
+   *
+   * @param _newGift The payload containing the gift information
+   * @return giftID The ID of the created gift
+   * @return nativeTokenValue The value of native tokens transferred to the contract (used for refunds)
+   */
+  function _processGift(NewGiftPayload calldata _newGift) internal returns (uint256 giftID, uint256 nativeTokenValue) {
+    giftID = _createGift(_newGift.tokens, _newGift.restrictions, _newGift.verifier);
+    nativeTokenValue = _transferTokenBatch(msg.sender, address(this), _newGift.tokens);
+  }
+
+  /**
+   * @dev Internal function to create a gift with the specified tokens, restrictions, and verifier.
+   *
+   * @param _tokens The tokens to be included in the gift
+   * @param _restrictions The restrictions to be applied to the gift
+   * @param _verifier The verifier address for the gift
+   * @return giftID The ID of the created gift
+   */
+  function _createGift(
+    Token[] calldata _tokens,
+    Restriction[] calldata _restrictions,
+    address _verifier
+  ) internal returns (uint256 giftID) {
     if (_verifier == address(0)) revert InvalidVerifier();
     if (allVerifiers[_verifier] != 0) revert InvalidVerifier();
 
     uint256 _tokensLength = _tokens.length;
+    uint256 _restrictionsLength = _restrictions.length;
 
     // Get a new unique gift ID
-    giftCounter++;
-    uint256 giftID = giftCounter;
+    giftID = ++giftCounter;
 
-    // Transfer tokens to smart contract
-    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER ITEMS IN ONE GIFT
+    // assign tokens to Gifts struct
     for (uint256 _i = 0; _i < _tokensLength; ) {
       allGifts[giftID].tokens.push(_tokens[_i]);
       unchecked {
@@ -154,19 +222,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
       }
     }
 
-    // Save the gift information
-    allGifts[giftID].creator = msg.sender;
-    allGifts[giftID].createdAt = block.timestamp;
-    allGifts[giftID].giftID = giftID;
-
-    // Attach restriction rules to the gift
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY
-    uint256 _restrictionsLength = _restrictions.length;
+    // assign restrictions to Gifts struct (if any)
     if (_restrictionsLength > 0) {
       if (_restrictionsLength > MAX_RESTRICTIONS_PER_GIFT) revert TooManyRestrictions();
       for (uint256 _i = 0; _i < _restrictionsLength; ) {
         if (!restrictionController.isValidRestriction(_restrictions[_i].id)) revert InvalidRestriction();
-        // Couldn't figure out a way how to pass _restrictions directly to allGifts[giftID].restrictions
         allGifts[giftID].restrictions.push(_restrictions[_i]);
         unchecked {
           _i++;
@@ -174,65 +234,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
       }
     }
 
+    // Save the gift information
+    allGifts[giftID].creator = msg.sender;
+    allGifts[giftID].createdAt = block.timestamp;
+    allGifts[giftID].giftID = giftID;
     allVerifiers[_verifier] = giftID;
-
-    _transferTokenBatch(msg.sender, address(this), _tokens);
-
-    emit GiftCreated(giftID, msg.sender);
-  }
-
-  function createGift(Token[] calldata _tokens, address _verifier) public payable {
-    Restriction[] memory empty = new Restriction[](0);
-    createGift(_tokens, empty, _verifier);
-  }
-
-  /**
-   * @dev Create multiple new gifts in one transaction
-
-   * Requirements:
-   * - Array sizes has to match
-   *
-   * @param _tokensArray  Array of Token[] structs
-   * @param _verifier Address of a verifier
-   *
-   */
-  function createGifts(
-    Token[][] calldata _tokensArray,
-    Restriction[][] memory _restrictions,
-    address[] calldata _verifier
-  ) external payable {
-    uint256 arrayLength = _tokensArray.length;
-    if (_tokensArray.length != arrayLength || _verifier.length != arrayLength)
-      revert InvalidPayload("Arrays must be of the same length");
-
-    // remaining balance after creating gifts - handle refunds
-    uint256 _remainingBalance = msg.value;
-
-    // TODO: CONSIDER HAVING A HARDCAP MAX NUMBER OF GIFTS IN ONE TX?
-    for (uint256 _i = 0; _i < arrayLength; ) {
-      createGift(_tokensArray[_i], _restrictions[_i], _verifier[_i]);
-
-      // Loop through tokens and subtract native token amounts from remaining balance
-      // Maybe there is a better gas-efficient way to do this?
-      uint256 _tokensLength = _tokensArray[_i].length;
-      for (uint256 _j = 0; _j < _tokensLength; ) {
-        if (_tokensArray[_i][_j].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
-          _remainingBalance -= _tokensArray[_i][_j].amount;
-        }
-        unchecked {
-          _j++;
-        }
-      }
-      unchecked {
-        _i++;
-      }
-    }
-
-    // if there is RON balance remaining, refund the rest
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY
-    if (_remainingBalance > 0) {
-      payable(msg.sender).transfer(_remainingBalance);
-    }
   }
 
   /**
@@ -270,9 +276,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // Retrieve the current gift from the mapping.
     Gift storage currentGift = allGifts[_giftID];
 
-    // if (currentGift.cancelled) revert GiftAlreadyCancelled();
-    // if (currentGift.claimed) revert GiftAlreadyClaimed();
-    // if (currentGift.creator == address(0)) revert InvalidGift();
     if (currentGift.creator == _receiver) revert Unauthorized();
 
     // Check for gift restrictions
@@ -336,12 +339,10 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    *
    */
   function cancelGifts(uint256[] calldata _giftIDs) external {
-    //console.log("Cancel Gifts", _giftIDs.length);
     uint256 arrayLength = _giftIDs.length;
     if (arrayLength == 0) revert InvalidGift();
     if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
     for (uint256 _i = 0; _i < arrayLength; ) {
-      //console.log(" - Cancel individual gift", _giftIDs[_i]);
       _cancelGift(_giftIDs[_i]);
       unchecked {
         _i++;
@@ -388,8 +389,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   }
 
   /// @dev Transfers multiple arbitrary tokens.
-  function _transferTokenBatch(address _from, address _to, Token[] memory _tokens) internal {
-    uint256 nativeTokenValue;
+  function _transferTokenBatch(
+    address _from,
+    address _to,
+    Token[] memory _tokens
+  ) internal returns (uint256 nativeTokenValue) {
     for (uint256 i = 0; i < _tokens.length; ) {
       if (_to == address(this) && _tokens[i].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
         nativeTokenValue += _tokens[i].amount;

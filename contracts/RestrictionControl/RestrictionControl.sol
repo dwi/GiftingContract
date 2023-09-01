@@ -29,7 +29,7 @@ contract RestrictionControl is Initializable, IRestrictionControl, ERC165 {
     conditions["isBlessingActive"] = Restriction(isBlessingActive, true);
     conditions["isBlessingInactive"] = Restriction(isBlessingInactive, true);
     conditions["hasBlessingStreak"] = Restriction(hasBlessingStreak, true);
-    conditions["hasTxCount"] = Restriction(hasRonBalance, true);
+    conditions["hasRonBalance"] = Restriction(hasRonBalance, true);
     conditions["hasTokenBalance"] = Restriction(hasTokenBalance, true);
   }
 

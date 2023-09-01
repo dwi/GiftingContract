@@ -53,22 +53,36 @@ describe('Gifts: Basics', async function () {
       expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
     });
     it('Should create gifts', async function () {
-      const gift1 = [
+      const tokens1 = [
         {
           assetContract: mockAxie.address,
           tokenId: 1,
           amount: 1,
         },
       ];
-      const gift2 = [
+      const tokens2 = [
         {
           assetContract: mockAxie.address,
           tokenId: 2,
           amount: 1,
         },
       ];
-      await giftContract.createGift(gift1, verifier1);
-      await giftContract.createGift(gift2, verifier2);
+      const gift1 = [
+        {
+          tokens: tokens1,
+          restrictions: [],
+          verifier: verifier1,
+        },
+      ];
+      const gift2 = [
+        {
+          tokens: tokens2,
+          restrictions: [],
+          verifier: verifier2,
+        },
+      ];
+      await giftContract.createGift(gift1[0]);
+      await giftContract.createGift(gift2[0]);
       expect(await mockAxie.ownerOf(1)).to.equal(giftContract.address);
       expect(await mockAxie.ownerOf(2)).to.equal(giftContract.address);
       expect((await giftContract.getGift(verifier1)).claimed).to.equal(false);
@@ -84,17 +98,23 @@ describe('Gifts: Basics', async function () {
         expect(await mockLand.isApprovedForAll(addr1.address, giftContract.address)).to.equal(true);
         const gift = [
           {
-            assetContract: mockAxie.address,
-            tokenId: 2000,
-            amount: 1,
-          },
-          {
-            assetContract: mockLand.address,
-            tokenId: 1000,
-            amount: 1,
+            tokens: [
+              {
+                assetContract: mockAxie.address,
+                tokenId: 2000,
+                amount: 1,
+              },
+              {
+                assetContract: mockLand.address,
+                tokenId: 1000,
+                amount: 1,
+              },
+            ],
+            restrictions: [],
+            verifier: mockVerifier.address,
           },
         ];
-        const tx = await giftContract.connect(addr1).createGift(gift, mockVerifier.address);
+        const tx = await giftContract.connect(addr1).createGift(gift[0]);
         await expect(tx).to.emit(giftContract, 'GiftCreated').withArgs(3, addr1.address);
       });
     });
@@ -111,76 +131,115 @@ describe('Gifts: Basics', async function () {
 
     describe('Test reverts', function () {
       it('Should revert createGift when re-using used verifier', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 3,
             amount: 1,
           },
         ];
-        await expect(giftContract.connect(owner).createGift(gift, mockVerifier.address)).to.be.revertedWithCustomError(
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: mockVerifier.address,
+          },
+        ];
+        await expect(giftContract.connect(owner).createGift(gift[0])).to.be.revertedWithCustomError(
           giftContract,
           'InvalidVerifier',
         );
       });
       it('Should revert createGift when using invalid ERC721/ERC20 address', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: addr2.address,
             tokenId: 3,
             amount: 1,
           },
         ];
-        await expect(giftContract.connect(owner).createGift(gift, ethers.Wallet.createRandom().address)).to.be.reverted;
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: ethers.Wallet.createRandom().address,
+          },
+        ];
+        await expect(giftContract.connect(owner).createGift(gift[0])).to.be.reverted;
       });
       it('Should revert when gifting owned token ID but gift contract is not approved', async function () {
         await mockAxie.connect(addr2).mint(2001);
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 2001,
             amount: 1,
           },
         ];
-        await expect(
-          giftContract.connect(addr2).createGift(gift, ethers.Wallet.createRandom().address),
-        ).to.be.revertedWith('ERC721: caller is not token owner or approved');
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: ethers.Wallet.createRandom().address,
+          },
+        ];
+        await expect(giftContract.connect(addr2).createGift(gift[0])).to.be.revertedWith(
+          'ERC721: caller is not token owner or approved',
+        );
       });
       it('Should revert when gifting not owned token ID', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 2001,
             amount: 1,
           },
         ];
-        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: ethers.Wallet.createRandom().address,
+          },
+        ];
+
+        await expect(giftContract.createGift(gift[0])).to.be.revertedWith(
           'ERC721: caller is not token owner or approved',
         );
       });
       it('Should revert when gifting not owned token ID placed on unapproved smart contract', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 1,
             amount: 1,
           },
         ];
-        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
-          'ERC721: transfer from incorrect owner',
-        );
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: ethers.Wallet.createRandom().address,
+          },
+        ];
+        await expect(giftContract.createGift(gift[0])).to.be.revertedWith('ERC721: transfer from incorrect owner');
       });
       it('Should revert when gifting invalid token ID', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 999999,
             amount: 1,
           },
         ];
-        await expect(giftContract.createGift(gift, ethers.Wallet.createRandom().address)).to.be.revertedWith(
-          'ERC721: invalid token ID',
-        );
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: ethers.Wallet.createRandom().address,
+          },
+        ];
+        await expect(giftContract.createGift(gift[0])).to.be.revertedWith('ERC721: invalid token ID');
       });
     });
   });
@@ -191,14 +250,21 @@ describe('Gifts: Basics', async function () {
       let giftID: any;
       let tx: any;
       it('Should generate a gift', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockAxie.address,
             tokenId: 5,
             amount: 1,
           },
         ];
-        const tx = await giftContract.connect(owner).createGift(gift, verifier.address);
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: verifier.address,
+          },
+        ];
+        const tx = await giftContract.connect(owner).createGift(gift[0]);
         const res = await tx.wait();
         giftID = getGiftIDfromTx(giftContract, res);
 
@@ -229,7 +295,7 @@ describe('Gifts: Basics', async function () {
         expect(await mockLand.isApprovedForAll(owner.address, giftContract.address)).to.equal(true);
       });
       it('Should generate a gift', async function () {
-        const gift = [
+        const tokens = [
           {
             assetContract: mockLand.address,
             tokenId: 10,
@@ -251,7 +317,14 @@ describe('Gifts: Basics', async function () {
             amount: 1,
           },
         ];
-        const tx = await giftContract.createGift(gift, verifier.address);
+        const gift = [
+          {
+            tokens: tokens,
+            restrictions: [],
+            verifier: verifier.address,
+          },
+        ];
+        const tx = await giftContract.createGift(gift[0]);
         const res = await tx.wait();
         giftID = getGiftIDfromTx(giftContract, res);
 

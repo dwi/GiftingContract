@@ -40,6 +40,7 @@ const config: HardhatUserConfig = {
     excludeContracts: ['MockERC20', 'MockERC721', 'ERC20', 'ERC721', 'MockAtiaShrine', 'MockWRON', 'ERC1155'],
     gasPrice: 20,
     enabled: true,
+    token: 'RON',
   },
 };
 

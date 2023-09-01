@@ -25,16 +25,21 @@ const createRandomSingleERC721Gift = async (owner: any, code: string, args?: { i
   const randomId = Math.floor(Math.random() * (1000000 - 100000)) + 100000;
   const { verifier } = getVerifierAndCode(code);
   await mockAxie.connect(owner).mint(randomId);
-  const gift = [
+  const tokens = [
     {
       assetContract: mockAxie.address,
       tokenId: randomId,
       amount: 0,
     },
   ];
-  const tx = args
-    ? giftContract['createGift((address,uint256,uint256)[],(string,bytes)[],address)'](gift, args, verifier.address)
-    : giftContract.createGift(gift, verifier.address);
+  const gift = [
+    {
+      tokens: tokens,
+      restrictions: args,
+      verifier: verifier.address,
+    },
+  ];
+  const tx = giftContract.createGift(gift[0]);
   return tx;
 };
 

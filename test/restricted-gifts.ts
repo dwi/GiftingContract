@@ -5,6 +5,7 @@ import { loadFixture } from '@nomicfoundation/hardhat-toolbox/network-helpers';
 import { Address, encodePacked } from 'viem';
 import { getVerifierAndCode, signData } from './utils/cryptography';
 import { deployContracts } from './utils/deployTokenFixture';
+import { NATIVE_TOKEN_ADDRESS } from './utils/helpers';
 
 let owner: HardhatEthersSigner,
   addr1: HardhatEthersSigner,
@@ -24,16 +25,21 @@ const createRandomSingleERC721Gift = async (owner: any, code: string, args?: { i
   const randomId = Math.floor(Math.random() * (1000000 - 100000)) + 100000;
   const { verifier } = getVerifierAndCode(code);
   await mockAxie.connect(owner).mint(randomId);
-  const gift = [
+  const tokens = [
     {
       assetContract: mockAxie.address,
       tokenId: randomId,
       amount: 0,
     },
   ];
-  const tx = args
-    ? giftContract['createGift((address,uint256,uint256)[],(string,bytes)[],address)'](gift, args, verifier.address)
-    : giftContract.createGift(gift, verifier.address);
+  const gift = [
+    {
+      tokens: tokens,
+      restrictions: args,
+      verifier: verifier.address,
+    },
+  ];
+  const tx = giftContract.createGift(gift[0]);
   return tx;
 };
 
@@ -78,7 +84,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
       expect(await mockAtia.hasCurrentlyActivated(owner.address)).to.equal(true);
     });
     it('Should Create a #1 gift: no restrictions', async function () {
-      const tx = await createRandomSingleERC721Gift(owner, '1');
+      const tx = await createRandomSingleERC721Gift(owner, '1', []);
       expect(await tx);
     });
     it('Should Create a #2 gift: Atia Blessing required', async function () {
@@ -157,17 +163,30 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
 
       expect(await tx);
     });
-    it('Should Create a #8 gift: Invalid Restriction', async function () {
+    it('Should Create a #8 gift: hasRonBalance', async function () {
+      const restrictions = [
+        {
+          id: 'hasRonBalance',
+          args: encodePacked(
+            ['bytes'],
+            [new ethers.AbiCoder().encode(['uint256'], [BigInt(10000 * 10e17)]) as Address],
+          ),
+        },
+      ];
+      const tx = await createRandomSingleERC721Gift(owner, '8', restrictions);
+      expect(await tx);
+    });
+    it('Revert: Invalid Restriction', async function () {
       const restrictions = [
         {
           id: 'gimmeAllTheMoney',
           args: encodePacked(['bytes'], [new ethers.AbiCoder().encode(['bool'], [true]) as Address]),
         },
       ];
-      const tx = createRandomSingleERC721Gift(owner, '8', restrictions);
+      const tx = createRandomSingleERC721Gift(owner, '99', restrictions);
       await expect(tx).to.be.revertedWithCustomError(giftContract, 'InvalidRestriction');
     });
-    it('Should Create a #9 gift: Atia Blessing & Invalid Restriction', async function () {
+    it('Should revert: Atia Blessing & Invalid Restriction', async function () {
       const restrictions = [
         {
           id: 'isBlessingActive',
@@ -178,7 +197,7 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
           args: '0x',
         },
       ];
-      const tx = createRandomSingleERC721Gift(owner, '9', restrictions);
+      const tx = createRandomSingleERC721Gift(owner, '999', restrictions);
       await expect(tx).to.be.revertedWithCustomError(giftContract, 'InvalidRestriction');
     });
   });
@@ -234,6 +253,18 @@ describe('Gifts: Gift claiming restrictions (Blessing Streak, token holdings, et
     it('Should Claim #7: More than 1000 AXS ✅', async function () {
       await mockAXS.connect(addr2).mint(1001);
       const tx = claimGiftTx(addr2, '7');
+      expect(await tx);
+    });
+    it('Should Revert #8: Not enough RON ❌', async function () {
+      const tx = claimGiftTx(addr1, '8');
+      await expect(tx).to.be.revertedWithCustomError(giftContract, 'UnmetRestriction').withArgs('hasRonBalance');
+    });
+    it('Should Claim #8: More than RON amount required ✅', async function () {
+      await owner.sendTransaction({
+        to: addr1.address,
+        value: BigInt(1 * 10e17),
+      });
+      const tx = claimGiftTx(addr1, '8');
       expect(await tx);
     });
     describe('Claim by Operator', function () {

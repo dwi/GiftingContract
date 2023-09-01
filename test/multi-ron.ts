@@ -37,39 +37,49 @@ describe('Gifts: RON/WRON Support', async function () {
     var giftID: any;
     var tx: any;
     it('Should generate a single RON', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: NATIVE_TOKEN_ADDRESS,
           tokenId: 0,
           amount: BigInt(1 * 10e17),
         },
       ];
-      const tx = await giftContract['createGift((address,uint256,uint256)[],address)'](gift, verifier.address, {
-        value: gift[0].amount,
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0], {
+        value: gift[0].tokens[0].amount,
       });
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWRON.balanceOf(giftContract.address)).to.equal(tx.value);
     });
     it('Should revert when not enough balance of RON', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: NATIVE_TOKEN_ADDRESS,
           tokenId: 0,
           amount: BigInt(9000 ** 18),
         },
       ];
-      const tx = giftContract['createGift((address,uint256,uint256)[],address)'](
-        gift,
-        ethers.Wallet.createRandom().address,
+      const gift = [
         {
-          value: gift[0].amount,
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
         },
-      );
+      ];
+      const tx = giftContract.createGift(gift[0], {
+        value: gift[0].tokens[0].amount,
+      });
       expect(tx).to.be.reverted;
     });
     it('Should revert when value is less than gift amount(s)', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: NATIVE_TOKEN_ADDRESS,
           tokenId: 0,
@@ -81,13 +91,16 @@ describe('Gifts: RON/WRON Support', async function () {
           amount: 100,
         },
       ];
-      const tx = giftContract['createGift((address,uint256,uint256)[],address)'](
-        gift,
-        ethers.Wallet.createRandom().address,
+      const gift = [
         {
-          value: 199,
+          tokens: tokens,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
         },
-      );
+      ];
+      const tx = giftContract.createGift(gift[0], {
+        value: 199,
+      });
       await expect(tx).to.be.revertedWithCustomError(giftContract, 'InsufficientBalance');
     });
     it('Should claim a gift', async function () {
@@ -99,7 +112,7 @@ describe('Gifts: RON/WRON Support', async function () {
       expect(await mockWRON.balanceOf(giftContract.address)).to.equal(0);
     });
     it('Should generate a multi-RON gift', async function () {
-      const gift = [
+      const tokens = [
         {
           assetContract: NATIVE_TOKEN_ADDRESS,
           tokenId: 0,
@@ -111,12 +124,88 @@ describe('Gifts: RON/WRON Support', async function () {
           amount: BigInt(2 * 10e17),
         },
       ];
-      const tx = await giftContract['createGift((address,uint256,uint256)[],address)'](gift, verifier2.address, {
-        value: gift[0].amount + gift[1].amount,
+      const gift = [
+        {
+          tokens: tokens,
+          restrictions: [],
+          verifier: verifier2.address,
+        },
+      ];
+      const tx = await giftContract.createGift(gift[0], {
+        value: gift[0].tokens[0].amount + gift[0].tokens[1].amount,
       });
       const res = await tx.wait();
       giftID = getGiftIDfromTx(giftContract, res);
       expect(await mockWRON.balanceOf(giftContract.address)).to.equal(tx.value);
+    });
+
+    it('Should refund extra RON properly (single)', async function () {
+      const startRon = await ethers.provider.getBalance(owner.address);
+      const tokens1 = [
+        {
+          assetContract: NATIVE_TOKEN_ADDRESS,
+          tokenId: 0,
+          amount: BigInt(1 * 10e17),
+        },
+      ];
+      const gift = [
+        {
+          tokens: tokens1,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+
+      const tx = await giftContract.createGift(gift[0], {
+        value: BigInt(50 * 10e17),
+      });
+
+      const res = await tx.wait();
+      giftID = getGiftIDfromTx(giftContract, res);
+      expect(startRon - (await ethers.provider.getBalance(owner.address))).to.above(BigInt(1 * 10e17));
+      expect(await ethers.provider.getBalance(owner.address)).above(startRon - BigInt(1.01 * 10e17));
+    });
+    it('Should refund extra RON properly (multi)', async function () {
+      const startRon = await ethers.provider.getBalance(owner.address);
+      const tokens1 = [
+        {
+          assetContract: NATIVE_TOKEN_ADDRESS,
+          tokenId: 0,
+          amount: BigInt(1 * 10e17),
+        },
+        {
+          assetContract: NATIVE_TOKEN_ADDRESS,
+          tokenId: 0,
+          amount: BigInt(2 * 10e17),
+        },
+      ];
+      const tokens2 = [
+        {
+          assetContract: NATIVE_TOKEN_ADDRESS,
+          tokenId: 0,
+          amount: BigInt(1 * 10e17),
+        },
+      ];
+      const gift = [
+        {
+          tokens: tokens1,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+        {
+          tokens: tokens2,
+          restrictions: [],
+          verifier: ethers.Wallet.createRandom().address,
+        },
+      ];
+      const tx = await giftContract.createGifts(gift, {
+        value: BigInt(50 * 10e17),
+      });
+
+      const res = await tx.wait();
+      giftID = getGiftIDfromTx(giftContract, res);
+      expect(startRon - (await ethers.provider.getBalance(owner.address))).to.above(BigInt(4 * 10e17));
+      expect(await ethers.provider.getBalance(owner.address)).above(startRon - BigInt(8 * 10e17));
     });
 
     describe('Events', function () {
