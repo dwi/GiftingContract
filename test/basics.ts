@@ -40,7 +40,6 @@ describe('Gifts: Basics', async function () {
     expect(await mockAtia.hasCurrentlyActivated(owner.address)).to.equal(false);
     expect(await mockAxie.name()).to.equal('Axie');
     expect(await mockLand.name()).to.equal('Land');
-    expect(await giftContract.version()).to.equal(3);
   });
 
   describe('Create a gift', function () {

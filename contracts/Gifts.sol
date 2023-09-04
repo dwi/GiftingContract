@@ -431,9 +431,4 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     bytes32 ethSignedMessageHash = ECDSA.toEthSignedMessageHash(messageHash);
     signer = ECDSA.recover(ethSignedMessageHash, _signature);
   }
-
-  // TODO: Temp thing for tests
-  function version() public pure returns (uint256) {
-    return 3;
-  }
 }
