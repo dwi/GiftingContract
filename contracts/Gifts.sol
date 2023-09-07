@@ -22,8 +22,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   IRestrictionControl private restrictionController;
   address internal immutable nativeTokenWrapper;
   uint256 public constant MAX_RESTRICTIONS_PER_GIFT = 10;
+  uint256 public constant MAX_TOKENS_PER_GIFT = 100;
+  uint256 public constant MAX_GIFTS_PER_CREATEGIFTS = 100;
   uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
-
   uint256 private giftCounter;
 
   /**
@@ -57,12 +58,12 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    */
   struct Gift {
     uint256 giftID;
-    Token[] tokens;
+    uint256 createdAt; // Timestamp of when the Gift was created
+    address creator; // Address of the Gift creator
     bool claimed; // Flag to track if the Gift has been claimed
     bool cancelled; // Flag to track if the Gift has been cancelled
-    address creator; // Address of the Gift creator
-    uint256 createdAt; // Timestamp of when the Gift was created
     Restriction[] restrictions;
+    Token[] tokens;
   }
 
   // Custom error messages
@@ -75,6 +76,9 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   error InvalidRestriction();
   error TooManyRestrictions();
   error TooManyGiftsToCancel();
+  error TooManyGifts();
+  error TooManyTokens();
+  error FailedtoRefundNativeToken();
   error UnmetRestriction(string restriction);
   error InvalidPayload(string message);
 
@@ -142,14 +146,17 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    *
    * @param _newGift The payload containing the gift information
    */
+
   function createGift(NewGiftPayload calldata _newGift) external payable {
     uint256 _remainingBalance = msg.value;
     (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift);
     _remainingBalance -= nativeTokenValue;
 
     // Refund RON leftover if any
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
-      payable(msg.sender).transfer(_remainingBalance);
+      (bool success, ) = msg.sender.call{value: _remainingBalance}("");
+      if (!success) revert FailedtoRefundNativeToken();
     }
 
     emit GiftCreated(giftID, msg.sender);
@@ -162,21 +169,23 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    */
   function createGifts(NewGiftPayload[] calldata _newGift) external payable {
     uint256 _arrayLength = _newGift.length;
+    if (_arrayLength > MAX_TOKENS_PER_GIFT) revert TooManyGifts();
+
     uint256 _remainingBalance = msg.value;
-
     for (uint256 _i = 0; _i < _arrayLength; ) {
-      (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift[_i]);
-      _remainingBalance -= nativeTokenValue;
-      emit GiftCreated(giftID, msg.sender);
-
       unchecked {
+        (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift[_i]);
+        _remainingBalance -= nativeTokenValue;
+        emit GiftCreated(giftID, msg.sender);
         _i++;
       }
     }
 
     // Refund RON leftover if any
+    // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
-      payable(msg.sender).transfer(_remainingBalance);
+      (bool success, ) = msg.sender.call{value: _remainingBalance}("");
+      if (!success) revert FailedtoRefundNativeToken();
     }
   }
 
@@ -209,6 +218,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     if (allVerifiers[_verifier] != 0) revert InvalidVerifier();
 
     uint256 _tokensLength = _tokens.length;
+    if (_tokensLength > MAX_TOKENS_PER_GIFT) revert TooManyTokens();
+
     uint256 _restrictionsLength = _restrictions.length;
 
     // Get a new unique gift ID
@@ -282,13 +293,12 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // TODO: CHECK FOR POSSIBLE VULNERABILITY BYPASSING THE RESTRICTION
     uint256 _restrictionsLength = currentGift.restrictions.length;
     for (uint256 _i = 0; _i < _restrictionsLength; ) {
-      if (
-        !restrictionController.checkRestriction(
-          _receiver,
-          currentGift.restrictions[_i].id,
-          currentGift.restrictions[_i].args
-        )
-      ) revert UnmetRestriction(currentGift.restrictions[_i].id);
+      bool restrictionCheck = restrictionController.checkRestriction(
+        _receiver,
+        currentGift.restrictions[_i].id,
+        currentGift.restrictions[_i].args
+      );
+      if (!restrictionCheck) revert UnmetRestriction(currentGift.restrictions[_i].id);
       unchecked {
         _i++;
       }
@@ -313,12 +323,12 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     giftsTemp = new Gift[](giftCounter);
     uint256 count;
     for (uint256 _i = 1; _i <= giftCounter; ) {
-      if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
-        giftsTemp[count] = allGifts[_i];
-        //giftsTemp[count].giftID = _i;
-        count += 1;
-      }
       unchecked {
+        if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
+          giftsTemp[count] = allGifts[_i];
+          //giftsTemp[count].giftID = _i;
+          count += 1;
+        }
         _i++;
       }
     }
@@ -343,8 +353,8 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     if (arrayLength == 0) revert InvalidGift();
     if (arrayLength > MAX_GIFTS_PER_CANCEL_TX) revert TooManyGiftsToCancel();
     for (uint256 _i = 0; _i < arrayLength; ) {
-      _cancelGift(_giftIDs[_i]);
       unchecked {
+        _cancelGift(_giftIDs[_i]);
         _i++;
       }
     }
