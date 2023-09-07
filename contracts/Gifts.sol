@@ -11,7 +11,7 @@ import {Ownable, Context} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IRestrictionControl} from "./Interfaces/IRestrictionControl.sol";
 import {InterfaceChecker, IERC1155, IERC721} from "./lib/InterfaceChecker.sol";
 import {CurrencyTransferLib} from "./lib/CurrencyTransferLib.sol";
-import "./IGifts.sol";
+import "./Interfaces/IGifts.sol";
 
 /**
  * @title Token Gifting Smart Contract
