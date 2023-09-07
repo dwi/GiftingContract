@@ -19,6 +19,7 @@ let owner: HardhatEthersSigner,
   mockAtia: any,
   mockWRON: any,
   restrictionControl: any,
+  minimalForwarder: any,
   newRestrictionControll: any;
 
 const createRandomSingleERC721Gift = async (owner: any, code: string, args?: { id: string; args: string }[]) => {
@@ -63,6 +64,7 @@ describe('Gifts: Test restriction controller upgrade', async function () {
     mockUSDC = x.mockUSDC;
     mockAXS = x.mockAXS;
     mockWRON = x.mockWRON;
+    minimalForwarder = x.minimalForwarder;
 
     // Legacy Restriction Control
     restrictionControl = await (

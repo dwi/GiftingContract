@@ -1,6 +1,12 @@
 const { ethers } = require('hardhat');
 
 export async function deployContracts() {
+  // Mock Forwarder
+  const MinimalForwarder = await ethers.getContractFactory('MinimalForwarder');
+  const minimalForwarder = await MinimalForwarder.deploy();
+  await minimalForwarder.waitForDeployment();
+  minimalForwarder.address = await minimalForwarder.getAddress();
+
   // Mock Atia
   const mockAtia = await (await ethers.getContractFactory('MockAtiaShrine')).deploy();
   await mockAtia.waitForDeployment();
@@ -49,6 +55,7 @@ export async function deployContracts() {
   mock1155.address = await mock1155.getAddress();
 
   return {
+    minimalForwarder,
     mockAtia,
     mockWRON,
     mockAxie,

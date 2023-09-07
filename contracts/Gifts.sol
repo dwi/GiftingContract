@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.19;
 
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+//import {ERC2771Recipient} from "@opengsn/contracts/src/ERC2771Recipient.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable, Context} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IRestrictionControl} from "./Interfaces/IRestrictionControl.sol";
 import {InterfaceChecker, IERC1155, IERC721} from "./lib/InterfaceChecker.sol";
 import {CurrencyTransferLib} from "./lib/CurrencyTransferLib.sol";
+import "./IGifts.sol";
 
 /**
  * @title Token Gifting Smart Contract
@@ -17,7 +20,7 @@ import {CurrencyTransferLib} from "./lib/CurrencyTransferLib.sol";
  * @dev Allows trustlessly give ERC20/ERC721/ERC1115/RON (aka 'Token') gifts to not yet known recepients.
  *
  */
-contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
+contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
   using InterfaceChecker for address;
   IRestrictionControl private restrictionController;
   address internal immutable nativeTokenWrapper;
@@ -27,61 +30,6 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   uint256 public constant MAX_GIFTS_PER_CANCEL_TX = 100;
   uint256 private giftCounter;
 
-  /**
-   * @dev Struct to represent a restriction on a gift.
-   */
-  struct Restriction {
-    string id;
-    bytes args;
-  }
-
-  /**
-   * @dev Struct to represent a token in a gift.
-   */
-  struct Token {
-    address assetContract;
-    uint256 tokenId;
-    uint256 amount;
-  }
-
-  /**
-   * @dev Struct to represent a new gift payload.
-   */
-  struct NewGiftPayload {
-    Token[] tokens;
-    Restriction[] restrictions;
-    address verifier;
-  }
-
-  /**
-   * @dev Struct to represent a gift.
-   */
-  struct Gift {
-    uint256 giftID;
-    uint256 createdAt; // Timestamp of when the Gift was created
-    address creator; // Address of the Gift creator
-    bool claimed; // Flag to track if the Gift has been claimed
-    bool cancelled; // Flag to track if the Gift has been cancelled
-    Restriction[] restrictions;
-    Token[] tokens;
-  }
-
-  // Custom error messages
-  error GiftAlreadyCancelled();
-  error GiftAlreadyClaimed();
-  error InvalidGift();
-  error Unauthorized();
-  error InvalidVerifier();
-  error InvalidControllerAddress();
-  error InvalidRestriction();
-  error TooManyRestrictions();
-  error TooManyGiftsToCancel();
-  error TooManyGifts();
-  error TooManyTokens();
-  error FailedtoRefundNativeToken();
-  error UnmetRestriction(string restriction);
-  error InvalidPayload(string message);
-
   mapping(uint256 => Gift) private allGifts; // Mapping from giftID to gift information
   mapping(address => uint256) private allVerifiers; // Mapping from verifier address to giftID
 
@@ -90,7 +38,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @param _nativeTokenWrapper The address of the native token wrapper contract
    * @param _restrictionController The address of the access control contract
    */
-  constructor(address _nativeTokenWrapper, address _restrictionController) {
+  constructor(address _nativeTokenWrapper, address _restrictionController) ERC2771Context(address(0)) {
     nativeTokenWrapper = _nativeTokenWrapper;
     restrictionController = IRestrictionControl(_restrictionController);
   }
@@ -99,7 +47,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    * @dev Fallback function to receive payments.
    */
   receive() external payable virtual {
-    require(msg.sender == nativeTokenWrapper, "caller not native token wrapper.");
+    require(_msgSender() == nativeTokenWrapper, "caller not native token wrapper.");
   }
 
   /**
@@ -124,22 +72,17 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
   }
 
   /**
-   * @dev Set the access control contract address
-   * @param _restrictionController The address of the access control contract
+   * @dev Set the restriction controller contract address
+   * @param _restrictionController The address of the valid contract
    * @notice Need to make sure the restriction controller is correct
    */
   function updateController(address _restrictionController) external onlyOwner {
-    if (_restrictionController.code.length == 0) revert InvalidControllerAddress(); //, "Invalid contract address");
-    if (!_restrictionController.isRestrictionControl()) revert InvalidControllerAddress(); //, "Invalid interface");
-    if (_restrictionController == address(0)) revert InvalidControllerAddress(); //, "Zero address");
+    if (_restrictionController.code.length == 0) revert InvalidControllerAddress();
+    if (!_restrictionController.isRestrictionControl()) revert InvalidControllerAddress();
+    if (_restrictionController == address(0)) revert InvalidControllerAddress();
     restrictionController = IRestrictionControl(_restrictionController);
     emit ControllerUpdated(_restrictionController);
   }
-
-  event GiftCreated(uint256 indexed _giftID, address _createdBy);
-  event GiftClaimed(uint256 indexed _giftID, address _claimedBy);
-  event GiftCancelled(uint256 indexed _giftID);
-  event ControllerUpdated(address _restrictionController);
 
   /**
    * @dev Creates a single gift in the specified payload
@@ -155,11 +98,11 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // Refund RON leftover if any
     // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
-      (bool success, ) = msg.sender.call{value: _remainingBalance}("");
+      (bool success, ) = payable(_msgSender()).call{value: _remainingBalance}("");
       if (!success) revert FailedtoRefundNativeToken();
     }
 
-    emit GiftCreated(giftID, msg.sender);
+    emit GiftCreated(giftID, _msgSender());
   }
 
   /**
@@ -176,7 +119,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
       unchecked {
         (uint256 giftID, uint256 nativeTokenValue) = _processGift(_newGift[_i]);
         _remainingBalance -= nativeTokenValue;
-        emit GiftCreated(giftID, msg.sender);
+        emit GiftCreated(giftID, _msgSender());
         _i++;
       }
     }
@@ -184,7 +127,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     // Refund RON leftover if any
     // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
-      (bool success, ) = msg.sender.call{value: _remainingBalance}("");
+      (bool success, ) = payable(_msgSender()).call{value: _remainingBalance}("");
       if (!success) revert FailedtoRefundNativeToken();
     }
   }
@@ -198,7 +141,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
    */
   function _processGift(NewGiftPayload calldata _newGift) internal returns (uint256 giftID, uint256 nativeTokenValue) {
     giftID = _createGift(_newGift.tokens, _newGift.restrictions, _newGift.verifier);
-    nativeTokenValue = _transferTokenBatch(msg.sender, address(this), _newGift.tokens);
+    nativeTokenValue = _transferTokenBatch(_msgSender(), address(this), _newGift.tokens);
   }
 
   /**
@@ -246,7 +189,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     }
 
     // Save the gift information
-    allGifts[giftID].creator = msg.sender;
+    allGifts[giftID].creator = _msgSender();
     allGifts[giftID].createdAt = block.timestamp;
     allGifts[giftID].giftID = giftID;
     allVerifiers[_verifier] = giftID;
@@ -324,7 +267,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     uint256 count;
     for (uint256 _i = 1; _i <= giftCounter; ) {
       unchecked {
-        if (allGifts[_i].creator == msg.sender && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
+        if (allGifts[_i].creator == _msgSender() && !allGifts[_i].claimed && !allGifts[_i].cancelled) {
           giftsTemp[count] = allGifts[_i];
           //giftsTemp[count].giftID = _i;
           count += 1;
@@ -370,7 +313,7 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     Gift storage currentGift = allGifts[_giftID];
 
     // Ensure that the gift can be cancelled
-    if (currentGift.creator != msg.sender) revert Unauthorized();
+    if (currentGift.creator != _msgSender()) revert Unauthorized();
 
     // Transfer the NFTs back to the gift creator
     _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
@@ -381,7 +324,13 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     emit GiftCancelled(_giftID);
   }
 
-  /// @dev Transfers an arbitrary token.
+  /**
+   * @dev Transfers a token from one address to another.
+   *
+   * @param _from The address from which the token is transferred
+   * @param _to The address to which the token is transferred
+   * @param _token The token to be transferred
+   */
   function _transferToken(address _from, address _to, Token memory _token) internal {
     if (_token.assetContract == CurrencyTransferLib.NATIVE_TOKEN || _token.assetContract.isERC20()) {
       CurrencyTransferLib.transferCurrencyWithWrapper(
@@ -398,7 +347,14 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     }
   }
 
-  /// @dev Transfers multiple arbitrary tokens.
+  /**
+   * @dev Transfers a batch of tokens from one address to another.
+   *
+   * @param _from The address from which the tokens are transferred
+   * @param _to The address to which the tokens are transferred
+   * @param _tokens The array of tokens to be transferred
+   * @return nativeTokenValue The total value of native tokens transferred (used for refunds)
+   */
   function _transferTokenBatch(
     address _from,
     address _to,
@@ -440,5 +396,15 @@ contract Gifts is ERC721Holder, ERC1155Holder, Ownable {
     bytes32 messageHash = keccak256(abi.encodePacked(_giftID, _receiver));
     bytes32 ethSignedMessageHash = ECDSA.toEthSignedMessageHash(messageHash);
     signer = ECDSA.recover(ethSignedMessageHash, _signature);
+  }
+
+  /// @dev ERC2771Context overrides
+  function _msgSender() internal view virtual override(Context, ERC2771Context) returns (address sender) {
+    sender = ERC2771Context._msgSender();
+  }
+
+  /// @dev ERC2771Context overrides
+  function _msgData() internal view virtual override(Context, ERC2771Context) returns (bytes calldata) {
+    return ERC2771Context._msgData();
   }
 }
