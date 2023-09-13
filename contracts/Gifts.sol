@@ -112,7 +112,7 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
    */
   function createGifts(NewGiftPayload[] calldata _newGift) external payable {
     uint256 _arrayLength = _newGift.length;
-    if (_arrayLength > MAX_TOKENS_PER_GIFT) revert TooManyGifts();
+    if (_arrayLength > MAX_GIFTS_PER_CREATEGIFTS) revert TooManyGifts();
 
     uint256 _remainingBalance = msg.value;
     for (uint256 _i = 0; _i < _arrayLength; ) {
@@ -360,7 +360,8 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     address _to,
     Token[] memory _tokens
   ) internal returns (uint256 nativeTokenValue) {
-    for (uint256 i = 0; i < _tokens.length; ) {
+    uint256 _arrayLength = _tokens.length;
+    for (uint256 i = 0; i < _arrayLength; ) {
       if (_to == address(this) && _tokens[i].assetContract == CurrencyTransferLib.NATIVE_TOKEN) {
         nativeTokenValue += _tokens[i].amount;
       } else {
