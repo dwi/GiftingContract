@@ -41,6 +41,7 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
   constructor(address _nativeTokenWrapper, address _restrictionController) ERC2771Context(address(0)) {
     nativeTokenWrapper = _nativeTokenWrapper;
     restrictionController = IRestrictionControl(_restrictionController);
+    //_setTrustedForwarder(address(0));
   }
 
   /**
@@ -83,6 +84,10 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     restrictionController = IRestrictionControl(_restrictionController);
     emit ControllerUpdated(_restrictionController);
   }
+
+  // function setTrustedForwarder(address _trustedForwarder) external onlyOwner {
+  //   _setTrustedForwarder(_trustedForwarder);
+  // }
 
   /**
    * @dev Creates a single gift in the specified payload
@@ -247,11 +252,11 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
       }
     }
 
-    // Transfer NFTs to the recipient of the gift.
-    _transferTokenBatch(address(this), _receiver, currentGift.tokens);
-
     // Mark the gift as claimed
     allGifts[_giftID].claimed = true;
+
+    // Transfer NFTs to the recipient of the gift.
+    _transferTokenBatch(address(this), _receiver, currentGift.tokens);
 
     emit GiftClaimed(_giftID, _receiver);
   }
@@ -315,11 +320,11 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     // Ensure that the gift can be cancelled
     if (currentGift.creator != _msgSender()) revert Unauthorized();
 
-    // Transfer the NFTs back to the gift creator
-    _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
-
     // Mark the gift as cancelled
     allGifts[_giftID].cancelled = true;
+
+    // Transfer the NFTs back to the gift creator
+    _transferTokenBatch(address(this), currentGift.creator, currentGift.tokens);
 
     emit GiftCancelled(_giftID);
   }
