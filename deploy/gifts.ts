@@ -25,7 +25,7 @@ const deploy = async ({ getNamedAccounts, deployments, network }: HardhatRuntime
   });
 };
 
-deploy.dependencies = ['RestrictionControl'];
+deploy.dependencies = ['RestrictionControl', 'VerifyContracts'];
 deploy.tags = ['Gifts'];
 
 export default deploy;

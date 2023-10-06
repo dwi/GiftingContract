@@ -67,7 +67,6 @@ Basic Glossary:
 - ~~The gift creator can pass `bytes` during the gift creation. The Restriction Controller's `checkRestriction` is called with such bytes to verify the restriction exists, and then it is stored in `allGifts[giftID].restrictions.args`.~~
 - ~~My concern is if a malicious gift creator can use specifically crafted `bytes` to somehow exploit the restriction controller, allowing them to do harm to the contract or allowing them to use the created gift with malicious `bytes` to claim/retrieve tokens from the contract that they are not supposed to.~~
 
-
 ### #8 Any missing/useless functions?
 
 - Should we add an onlyOwner function to cancel gifts on behalf of someone else?

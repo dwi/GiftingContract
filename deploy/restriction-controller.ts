@@ -25,7 +25,7 @@ const deploy = async ({ getNamedAccounts, deployments, network }: HardhatRuntime
   });
 };
 
-deploy.dependencies = ['MockContracts'];
+deploy.dependencies = ['MockContracts', 'VerifyContracts'];
 deploy.tags = ['RestrictionControl'];
 
 export default deploy;
