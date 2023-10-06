@@ -34,41 +34,44 @@ Basic Glossary:
 
 ## Concerns
 
-### #1 The size of the `allGifts` mapping
+### ~~#1 The size of the `allGifts` mapping~~ ✅ Acceptable
 
-- All active/claimed/cancelled gifts are stored in this mapping. Should we be concerned about the potential size? If so, we can remove claimed/cancelled gifts from the mapping to reduce its size. The downside would be that the `receiver` would not know the reason why they cannot claim their gift (whether the creator cancelled it or someone else claimed it quicker). This could lead to higher gas usage for claiming/cancellations.
+- ~~All active/claimed/cancelled gifts are stored in this mapping. Should we be concerned about the potential size? If so, we can remove claimed/cancelled gifts from the mapping to reduce its size. The downside would be that the `receiver` would not know the reason why they cannot claim their gift (whether the creator cancelled it or someone else claimed it quicker). This could lead to higher gas usage for claiming/cancellations.~~
 
-### #2 The size of `allVerifiers` mapping
+### ~~#2 The size of `allVerifiers` mapping~~ ✅ Acceptable, verifiers should not be reused
 
-- Over time, it will collect addresses of all used verifiers in the past (for active/claimed/cancelled gifts). The purpose is to block the re-use of already used verifiers. If this is a valid concern, then I could delete verifiers when a gift is being cancelled or claimed. This could lead to higher gas usage for claiming/cancellations.
+- ~~Over time, it will collect addresses of all used verifiers in the past (for active/claimed/cancelled gifts). The purpose is to block the re-use of already used verifiers. If this is a valid concern, then I could delete verifiers when a gift is being cancelled or claimed. This could lead to higher gas usage for claiming/cancellations.~~
 
-### #3 Giving away too much info could benefit attackers?
+### ~~#3 Giving away too much info could benefit attackers?~~ ✅ No risk exposing wheter invalid gift was claimed or cancelled
 
-- Should `getGift` return cancelled/claimed gifts?
-- Should `cancelGift` and `claimGift` revert with specific reasons why a gift cannot be cancelled/claimed? (already claimed/cancelled)?
+- ~~Should `getGift` return cancelled/claimed gifts?~~
+- ~~Should `cancelGift` and `claimGift` revert with specific reasons why a gift cannot be cancelled/claimed? (already claimed/cancelled)?~~
 
-### #4 "Cannot claim your own gift"
+### ~~#4 "Cannot claim your own gift"~~ ✅ Accepted, check will stay
 
-- Maybe this is a completely pointless check, and removing it could save some gas.
+- ~~Maybe this is a completely pointless check, and removing it could save some gas.~~
 
-### #5 "Non-upgradable main contract?"
+### ~~#5 "Non-upgradable main contract?"~~ ✅ Accepted solution
 
-- The main contract is not upgradable on purpose - it holds gifted tokens, and a malicious upgrade could introduce ways to take them all.
+- ~~The main contract is not upgradable on purpose - it holds gifted tokens, and a malicious upgrade could introduce ways to take them all.~~
 
-### #6 "Restriction Controller" upgradable or standalone?
+### ~~#6 "Restriction Controller" upgradable or standalone?~~ ✅ Acepted solution 1
 
-- There are 2 options for handling the upgradeability of the restriction controller (currently I went with option `#1`):
+- ~~There are 2 options for handling the upgradeability of the restriction controller (currently I went with option `#1`):~~
 
-1. `Gifts.sol` is Ownable, and onlyOwner can change the implementation address. If a new version is out, then the owner would just change the address.
-2. `Gifts.sol` would not need to be Ownable. We would deploy the `Restriction Controller` as an upgradable transparent proxy and use the proxy address in the `Gifts.sol` constructor. If a new version is out, then we would upgrade the proxy, and `Gifts.sol` would remain untouched.
+1. ~~`Gifts.sol` is Ownable, and onlyOwner can change the implementation address. If a new version is out, then the owner would just change the address.~~
+2. ~~`Gifts.sol` would not need to be Ownable. We would deploy the `Restriction Controller` as an upgradable transparent proxy and use the proxy address in the `Gifts.sol` constructor. If a new version is out, then we would upgrade the proxy, and `Gifts.sol` would remain untouched.~~
 
-### #7 "Exploitable restriction controller"
+### ~~#7 "Exploitable restriction controller"~~ ✅ Security review passed
 
-- The gift creator can pass `bytes` during the gift creation. The Restriction Controller's `checkRestriction` is called with such bytes to verify the restriction exists, and then it is stored in `allGifts[giftID].restrictions.args`.
-- My concern is if a malicious gift creator can use specifically crafted `bytes` to somehow exploit the restriction controller, allowing them to do harm to the contract or allowing them to use the created gift with malicious `bytes` to claim/retrieve tokens from the contract that they are not supposed to.
+- ~~The gift creator can pass `bytes` during the gift creation. The Restriction Controller's `checkRestriction` is called with such bytes to verify the restriction exists, and then it is stored in `allGifts[giftID].restrictions.args`.~~
+- ~~My concern is if a malicious gift creator can use specifically crafted `bytes` to somehow exploit the restriction controller, allowing them to do harm to the contract or allowing them to use the created gift with malicious `bytes` to claim/retrieve tokens from the contract that they are not supposed to.~~
+
 
 ### #8 Any missing/useless functions?
 
 - Should we add an onlyOwner function to cancel gifts on behalf of someone else?
 - Or make contract pausable and add emergencyExit to cancel all existing gifts, return assets to owners and pause contract?
 - Should the contract be pausable?
+
+  ✅ Added `emergencyExit`, just in case

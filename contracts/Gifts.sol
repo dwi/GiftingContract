@@ -399,6 +399,18 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     signer = ECDSA.recover(ethSignedMessageHash, _signature);
   }
 
+  /**
+   * @dev Emergency exit function to cancel all existing gifts and return the tokens to the gift creators.
+   *
+   */
+  function emergencyExit() external onlyOwner {
+    for (uint256 _i = 1; _i <= giftCounter; _i++) {
+      if (!allGifts[_i].claimed && !allGifts[_i].cancelled) {
+        _cancelGift(_i);
+      }
+    }
+  }
+
   /// @dev ERC2771Context overrides
   function _msgSender() internal view virtual override(Context, ERC2771Context) returns (address sender) {
     sender = ERC2771Context._msgSender();
