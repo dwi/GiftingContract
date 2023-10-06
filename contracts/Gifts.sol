@@ -66,7 +66,6 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
    */
   function _checkGiftValidity(uint256 _giftID) internal view virtual {
     Gift storage currentGift = allGifts[_giftID];
-    // TODO: Maybe move things around to save gas and not expose the cancelled/claimed status before checking the owner?
     if (currentGift.cancelled) revert GiftAlreadyCancelled();
     if (currentGift.claimed) revert GiftAlreadyClaimed();
     if (currentGift.creator == address(0)) revert InvalidGift();
@@ -101,7 +100,6 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     _remainingBalance -= nativeTokenValue;
 
     // Refund RON leftover if any
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
       (bool success, ) = payable(_msgSender()).call{value: _remainingBalance}("");
       if (!success) revert FailedtoRefundNativeToken();
@@ -130,7 +128,6 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     }
 
     // Refund RON leftover if any
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY - CAN GIFT CREATOR MAKE A GIFT WITH RON AND GET THE RON BACK REFUNDED? ALLOWING GIFT CLAIMER TO DRAIN THE RON FROM THE CONTRACT?
     if (_remainingBalance > 0) {
       (bool success, ) = payable(_msgSender()).call{value: _remainingBalance}("");
       if (!success) revert FailedtoRefundNativeToken();
@@ -212,9 +209,8 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     uint256 giftID = allVerifiers[_verifier];
     currentGift = allGifts[giftID];
 
-    // Check if the gift exists and has not been cancelled.
-    // TODO: Concern #3 - Should return cancelled/claimed gifts or just return "Invalid gift"?
-    if (allGifts[giftID].creator == address(0) || allGifts[giftID].cancelled == true) revert InvalidGift();
+    // Check if the gift exists
+    if (allGifts[giftID].creator == address(0)) revert InvalidGift();
   }
 
   /**
@@ -238,7 +234,6 @@ contract Gifts is IGifts, ERC721Holder, ERC1155Holder, ERC2771Context, Ownable {
     if (currentGift.creator == _receiver) revert Unauthorized();
 
     // Check for gift restrictions
-    // TODO: CHECK FOR POSSIBLE VULNERABILITY BYPASSING THE RESTRICTION
     uint256 _restrictionsLength = currentGift.restrictions.length;
     for (uint256 _i = 0; _i < _restrictionsLength; ) {
       bool restrictionCheck = restrictionController.checkRestriction(
