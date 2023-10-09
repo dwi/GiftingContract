@@ -74,3 +74,9 @@ Basic Glossary:
 - Should the contract be pausable?
 
   ✅ Added `emergencyExit`, just in case
+
+## Deploy
+
+```bash
+yarn hardhat deploy --network <ronin|saigon>
+```
