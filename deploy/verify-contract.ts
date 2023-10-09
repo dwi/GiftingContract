@@ -3,7 +3,7 @@ import { network } from 'hardhat';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
 
 const deploy = async (hre: HardhatRuntimeEnvironment) => {
-  if (network.name == 'ronin' || network.name == 'siagon') {
+  if (network.name == 'ronin' || network.name == 'saigon') {
     await hre.run(TASK_SOURCIFY, {
       endpoint: 'https://sourcify.roninchain.com/server',
     });
